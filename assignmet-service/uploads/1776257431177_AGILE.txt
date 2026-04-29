@@ -1,0 +1,36 @@
+AGILE
+
+methodology 
+iteraive process in which u deliver a value through a basic solution and enhance it over time
+
+you deliver quickly and often
+
+constant communication and interaction with the customer
+
+Add more prodduct features over time - in sprints(a period of time - generally 2 weeks)
+
+MVP - min viable product (satisfies the basic requirement
+here you deliver the MVP
+
+------
+
+traditional 
+	- one after another - alanysis->design->code->test
+	- scope change is restricted in traditional
+agile 
+	- iterative
+	- working software(measure of progress) is preferred over documentation
+	 
+--------
+
+principles
+	delivered frequently (speed of execution - velocity)
+	simplicity
+
+----------
+
+Key points:
+
+user stories - product features/ requirements/ tasks that add value to the end customer
+
+Story points - 
