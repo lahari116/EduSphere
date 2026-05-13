@@ -1,6 +1,7 @@
 package com.edusphere.assignment.service;
 
 import com.edusphere.assignment.dto.request.CreateAssignmentRequest;
+import com.edusphere.assignment.dto.request.UpdateAssignmentRequest;
 import com.edusphere.assignment.dto.response.AssignmentDetailResponse;
 import com.edusphere.assignment.dto.response.AssignmentResponse;
 import org.springframework.web.multipart.MultipartFile;
@@ -20,6 +21,10 @@ public interface AssignmentService {
     List<AssignmentResponse> getAssignmentsByCourse(UUID courseId);
 
     AssignmentDetailResponse getAssignmentForStudent(UUID assignmentId);
+
+    AssignmentResponse updateAssignment(UUID assignmentId, UpdateAssignmentRequest request, UUID instructorId);
+
+    void deleteAssignment(UUID assignmentId, UUID instructorId);
 
     void deactivateAssignment(UUID assignmentId);
 }

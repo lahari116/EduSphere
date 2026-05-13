@@ -1,13 +1,14 @@
 package com.edusphere.iam.serviceImpl;
 
 import com.edusphere.iam.client.AuditServiceClient;
+import com.edusphere.iam.client.NotificationServiceClient;
 import com.edusphere.iam.client.dto.AuditLogRequest;
+import com.edusphere.iam.client.dto.DispatchNotificationRequest;
 import com.edusphere.iam.dto.request.*;
 import com.edusphere.iam.dto.response.AuthResponse;
 import com.edusphere.iam.entity.OtpToken;
 import com.edusphere.iam.entity.RefreshToken;
 import com.edusphere.iam.entity.User;
-import com.edusphere.iam.entity.UserConsent;
 import com.edusphere.iam.exception.CustomException;
 import com.edusphere.iam.repository.*;
 import com.edusphere.iam.security.JwtUtil;
@@ -19,8 +20,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
-import org.springframework.mail.SimpleMailMessage;
-import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -30,7 +29,6 @@ import java.security.SecureRandom;
 import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.HexFormat;
-import java.util.Optional;
 import java.util.UUID;
 
 @Slf4j
@@ -41,11 +39,10 @@ public class AuthServiceImpl implements AuthService {
     private final UserRepository userRepository;
     private final RefreshTokenRepository refreshTokenRepository;
     private final OtpTokenRepository otpTokenRepository;
-    private final UserConsentRepository userConsentRepository;
     private final JwtUtil jwtUtil;
     private final PasswordEncoder passwordEncoder;
-    private final JavaMailSender mailSender;
     private final AuditServiceClient auditServiceClient;
+    private final NotificationServiceClient notificationServiceClient;
 
     @Value("${app.jwt.refresh-expiration-ms}")
     private long refreshExpirationMs;
@@ -64,10 +61,8 @@ public class AuthServiceImpl implements AuthService {
             throw new CustomException("Invalid email or password", HttpStatus.UNAUTHORIZED);
         }
 
-        String accessToken = jwtUtil.generateAccessToken(user.getUserId(), user.getEmail(), user.getRole().name(), user.isConsentAccepted());
-        String refreshToken = generateAndStoreRefreshToken(user.getUserId(), response);
-
-        boolean consentRequired = !userConsentRepository.existsByUserIdAndTermsVersion(user.getUserId(), "1.0");
+        String accessToken = jwtUtil.generateAccessToken(user.getUserId(), user.getEmail(), user.getRole().name());
+        generateAndStoreRefreshToken(user.getUserId(), response);
 
         try {
             auditServiceClient.createLog(AuditLogRequest.builder()
@@ -90,7 +85,6 @@ public class AuthServiceImpl implements AuthService {
                 .firstName(user.getFirstName())
                 .lastName(user.getLastName())
                 .role(user.getRole())
-                .consentRequired(consentRequired)
                 .passwordChangeRequired(user.isTempPasswordChangeRequired())
                 .build();
     }
@@ -114,7 +108,7 @@ public class AuthServiceImpl implements AuthService {
         stored.setRevoked(true);
         refreshTokenRepository.save(stored);
 
-        String newAccessToken = jwtUtil.generateAccessToken(user.getUserId(), user.getEmail(), user.getRole().name(), user.isConsentAccepted());
+        String newAccessToken = jwtUtil.generateAccessToken(user.getUserId(), user.getEmail(), user.getRole().name());
         generateAndStoreRefreshToken(user.getUserId(), response);
 
         return AuthResponse.builder()
@@ -164,8 +158,17 @@ public class AuthServiceImpl implements AuthService {
                 .build();
         otpTokenRepository.save(otpToken);
 
-        sendEmail(user.getEmail(), "EduSphere Password Reset OTP",
-                "Your OTP for password reset is: " + otp + "\nThis OTP is valid for 10 minutes.");
+        try {
+            notificationServiceClient.dispatch(DispatchNotificationRequest.builder()
+                    .userId(user.getUserId())
+                    .recipientEmail(user.getEmail())
+                    .eventType("PASSWORD_RESET_OTP")
+                    .title("EduSphere Password Reset OTP")
+                    .body("Your OTP for password reset is: " + otp + "\nThis OTP is valid for 10 minutes.")
+                    .build());
+        } catch (Exception e) {
+            log.warn("Failed to send OTP email via notification service: {}", e.getMessage());
+        }
     }
 
     @Override
@@ -191,8 +194,18 @@ public class AuthServiceImpl implements AuthService {
         otpTokenRepository.save(otp);
 
         refreshTokenRepository.revokeAllByUserId(user.getUserId());
-        sendEmail(user.getEmail(), "EduSphere Password Changed",
-                "Your password has been successfully reset. If you did not do this, contact admin immediately.");
+
+        try {
+            notificationServiceClient.dispatch(DispatchNotificationRequest.builder()
+                    .userId(user.getUserId())
+                    .recipientEmail(user.getEmail())
+                    .eventType("PASSWORD_CHANGED")
+                    .title("EduSphere Password Changed")
+                    .body("Your password has been successfully reset. If you did not do this, contact admin immediately.")
+                    .build());
+        } catch (Exception e) {
+            log.warn("Failed to send password-changed email via notification service: {}", e.getMessage());
+        }
     }
 
     @Override
@@ -210,68 +223,23 @@ public class AuthServiceImpl implements AuthService {
         userRepository.save(user);
 
         refreshTokenRepository.revokeAllByUserId(user.getUserId());
-        sendEmail(user.getEmail(), "EduSphere Password Changed",
-                "Your EduSphere password has been changed. If you did not do this, contact admin immediately.");
+
+        try {
+            notificationServiceClient.dispatch(DispatchNotificationRequest.builder()
+                    .userId(user.getUserId())
+                    .recipientEmail(user.getEmail())
+                    .eventType("PASSWORD_CHANGED")
+                    .title("EduSphere Password Changed")
+                    .body("Your EduSphere password has been changed. If you did not do this, contact admin immediately.")
+                    .build());
+        } catch (Exception e) {
+            log.warn("Failed to send password-changed email via notification service: {}", e.getMessage());
+        }
     }
 
     @Override
     public boolean validateToken(String token) {
         return jwtUtil.isTokenValid(token);
-    }
-
-    @Override
-    @Transactional
-    public AuthResponse acceptConsent(String userId, ConsentRequest request, String ipAddress,
-                                      jakarta.servlet.http.HttpServletResponse response) {
-        if (!request.isAccepted()) {
-            throw new CustomException("Consent must be accepted to use the platform", HttpStatus.BAD_REQUEST);
-        }
-        UUID uid = UUID.fromString(userId);
-        User user = userRepository.findById(uid)
-                .orElseThrow(() -> new CustomException("User not found", HttpStatus.NOT_FOUND));
-
-        UserConsent consent = UserConsent.builder()
-                .userId(uid)
-                .termsVersion(request.getTermsVersion())
-                .acceptedAt(LocalDateTime.now())
-                .ipAddress(ipAddress)
-                .build();
-        userConsentRepository.save(consent);
-
-        user.setConsentAccepted(true);
-        user.setConsentVersion(request.getTermsVersion());
-        userRepository.save(user);
-
-        // Issue fresh token with consentAccepted=true
-        String newAccessToken = jwtUtil.generateAccessToken(user.getUserId(), user.getEmail(),
-                user.getRole().name(), true);
-        generateAndStoreRefreshToken(user.getUserId(), response);
-
-        try {
-            auditServiceClient.createLog(AuditLogRequest.builder()
-                    .actorId(uid)
-                    .actorRole(user.getRole().name())
-                    .action("CONSENT_ACCEPTED")
-                    .resourceType("USER_CONSENT")
-                    .resourceId(uid.toString())
-                    .serviceName("iam-service")
-                    .additionalData("termsVersion=" + request.getTermsVersion())
-                    .build());
-        } catch (Exception e) {
-            log.warn("Failed to create audit log for CONSENT_ACCEPTED: {}", e.getMessage());
-        }
-
-        return AuthResponse.builder()
-                .accessToken(newAccessToken)
-                .tokenType("Bearer")
-                .userId(user.getUserId())
-                .email(user.getEmail())
-                .firstName(user.getFirstName())
-                .lastName(user.getLastName())
-                .role(user.getRole())
-                .consentRequired(false)
-                .passwordChangeRequired(user.isTempPasswordChangeRequired())
-                .build();
     }
 
     private String generateAndStoreRefreshToken(UUID userId, HttpServletResponse response) {
@@ -321,17 +289,5 @@ public class AuthServiceImpl implements AuthService {
     private String generateOtp() {
         SecureRandom random = new SecureRandom();
         return String.format("%06d", random.nextInt(1000000));
-    }
-
-    private void sendEmail(String to, String subject, String body) {
-        try {
-            SimpleMailMessage message = new SimpleMailMessage();
-            message.setTo(to);
-            message.setSubject(subject);
-            message.setText(body);
-            mailSender.send(message);
-        } catch (Exception e) {
-            // Log but don't fail — email is best-effort
-        }
     }
 }

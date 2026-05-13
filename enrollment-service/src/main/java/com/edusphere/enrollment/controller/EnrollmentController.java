@@ -38,6 +38,21 @@ public class EnrollmentController {
                 .body(ApiResponse.success("Enrollment created successfully", response));
     }
 
+    @PostMapping("/self")
+    @PreAuthorize("hasAnyRole('STUDENT', 'INSTRUCTOR')")
+    @Operation(summary = "Self-enroll into a course",
+            description = "Students and Instructors can enroll themselves. "
+                    + "Department restrictions still apply. Send only courseId in the body.")
+    public ResponseEntity<ApiResponse<EnrollmentResponse>> selfEnroll(
+            @RequestHeader("X-User-Id") String userId,
+            @RequestHeader("X-User-Role") String userRole,
+            @RequestParam UUID courseId) {
+        EnrollmentResponse response = enrollmentService.selfEnroll(
+                UUID.fromString(userId), userRole, courseId);
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.success("Self-enrollment successful", response));
+    }
+
     @GetMapping
     @PreAuthorize("hasAnyRole('ADMIN', 'COORDINATOR', 'INSTRUCTOR')")
     @Operation(summary = "Get all enrollments for a course",

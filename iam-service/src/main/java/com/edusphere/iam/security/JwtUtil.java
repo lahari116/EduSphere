@@ -26,15 +26,10 @@ public class JwtUtil {
     }
 
     public String generateAccessToken(UUID userId, String email, String role) {
-        return generateAccessToken(userId, email, role, false);
-    }
-
-    public String generateAccessToken(UUID userId, String email, String role, boolean consentAccepted) {
         return Jwts.builder()
                 .subject(userId.toString())
                 .claim("email", email)
                 .claim("role", role)
-                .claim("consentAccepted", consentAccepted)
                 .issuedAt(new Date())
                 .expiration(new Date(System.currentTimeMillis() + expirationMs))
                 .signWith(getKey())

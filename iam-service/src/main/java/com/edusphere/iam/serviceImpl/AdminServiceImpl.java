@@ -1,7 +1,9 @@
 package com.edusphere.iam.serviceImpl;
 
 import com.edusphere.iam.client.AuditServiceClient;
+import com.edusphere.iam.client.NotificationServiceClient;
 import com.edusphere.iam.client.dto.AuditLogRequest;
+import com.edusphere.iam.client.dto.DispatchNotificationRequest;
 import com.edusphere.iam.dto.response.UserResponse;
 import com.edusphere.iam.entity.User;
 import com.edusphere.iam.enums.Role;
@@ -13,8 +15,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.http.HttpStatus;
-import org.springframework.mail.SimpleMailMessage;
-import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -33,8 +33,8 @@ public class AdminServiceImpl implements AdminService {
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
-    private final JavaMailSender mailSender;
     private final AuditServiceClient auditServiceClient;
+    private final NotificationServiceClient notificationServiceClient;
 
     private static final String CHARS = "ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789@#$!";
 
@@ -91,11 +91,10 @@ public class AdminServiceImpl implements AdminService {
                         .studentOrEmployeeId(empStudentId)
                         .active(true)
                         .tempPasswordChangeRequired(true)
-                        .consentAccepted(false)
                         .build();
                 User saved = userRepository.save(user);
 
-                sendOnboardingEmail(email, firstName, tempPassword);
+                sendOnboardingEmail(saved.getUserId(), email, firstName, tempPassword);
 
                 created.add(UserResponse.builder()
                         .userId(saved.getUserId())
@@ -171,19 +170,23 @@ public class AdminServiceImpl implements AdminService {
                 .collect(Collectors.joining());
     }
 
-    private void sendOnboardingEmail(String email, String firstName, String tempPassword) {
+    private void sendOnboardingEmail(UUID userId, String email, String firstName, String tempPassword) {
         try {
-            SimpleMailMessage msg = new SimpleMailMessage();
-            msg.setTo(email);
-            msg.setSubject("Welcome to EduSphere!");
-            msg.setText("Dear " + firstName + ",\n\n" +
-                    "Your EduSphere account has been created.\n\n" +
-                    "Login URL: http://localhost:3000/login\n" +
-                    "Email: " + email + "\n" +
-                    "Temporary Password: " + tempPassword + "\n\n" +
-                    "Please change your password immediately after first login.\n\n" +
-                    "EduSphere Team");
-            mailSender.send(msg);
-        } catch (Exception ignored) {}
+            notificationServiceClient.dispatch(DispatchNotificationRequest.builder()
+                    .userId(userId)
+                    .recipientEmail(email)
+                    .eventType("USER_ONBOARDED")
+                    .title("Welcome to EduSphere!")
+                    .body("Dear " + firstName + ",\n\n"
+                            + "Your EduSphere account has been created.\n\n"
+                            + "Login URL: http://localhost:3000/login\n"
+                            + "Email: " + email + "\n"
+                            + "Temporary Password: " + tempPassword + "\n\n"
+                            + "Please change your password immediately after first login.\n\n"
+                            + "EduSphere Team")
+                    .build());
+        } catch (Exception e) {
+            log.warn("Failed to send onboarding email via notification service for {}: {}", email, e.getMessage());
+        }
     }
 }

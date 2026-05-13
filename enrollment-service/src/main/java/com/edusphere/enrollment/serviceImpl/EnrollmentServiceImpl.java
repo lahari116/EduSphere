@@ -15,7 +15,6 @@ import com.edusphere.enrollment.enums.UserRole;
 import com.edusphere.enrollment.exception.CustomException;
 import com.edusphere.enrollment.repository.EnrollmentRepository;
 import com.edusphere.enrollment.service.EnrollmentService;
-import feign.FeignException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -41,7 +40,7 @@ public class EnrollmentServiceImpl implements EnrollmentService {
     @Override
     @Transactional
     public EnrollmentResponse enroll(EnrollRequest request) {
-        // 1. Validate user exists in IAM service
+        // 1. Validate user exists in IAM service — mandatory, no bypass
         UUID userDeptId = null;
         try {
             ClientApiResponse<UserDto> userResp = iamServiceClient.getUser(request.getUserId());
@@ -55,10 +54,9 @@ public class EnrollmentServiceImpl implements EnrollmentService {
             userDeptId = user.getDepartmentId();
         } catch (CustomException e) {
             throw e;
-        } catch (FeignException e) {
-            log.warn("IAM service unavailable, skipping user existence check: {}", e.getMessage());
         } catch (Exception e) {
-            log.warn("Could not verify user existence: {}", e.getMessage());
+            log.error("Failed to verify user existence in IAM service: {}", e.getMessage());
+            throw new CustomException("Unable to verify user — IAM service unavailable. Please try again.", HttpStatus.SERVICE_UNAVAILABLE);
         }
 
         // 2. Validate course exists and is available
@@ -123,6 +121,27 @@ public class EnrollmentServiceImpl implements EnrollmentService {
         }
 
         return toResponse(saved);
+    }
+
+    @Override
+    @Transactional
+    public EnrollmentResponse selfEnroll(UUID userId, String userRole, UUID courseId) {
+        UserRole role;
+        try {
+            role = UserRole.valueOf(userRole.toUpperCase());
+        } catch (Exception e) {
+            throw new CustomException("Invalid role: " + userRole, HttpStatus.BAD_REQUEST);
+        }
+        if (role != UserRole.STUDENT && role != UserRole.INSTRUCTOR) {
+            throw new CustomException("Only STUDENT and INSTRUCTOR can self-enroll", HttpStatus.FORBIDDEN);
+        }
+        EnrollRequest request = EnrollRequest.builder()
+                .userId(userId)
+                .courseId(courseId)
+                .userRole(role)
+                .isException(false)
+                .build();
+        return enroll(request);
     }
 
     @Override

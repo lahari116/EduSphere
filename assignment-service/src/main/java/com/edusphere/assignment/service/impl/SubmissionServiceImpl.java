@@ -21,7 +21,6 @@ import com.edusphere.assignment.repository.QuestionRepository;
 import com.edusphere.assignment.repository.SubmissionAnswerRepository;
 import com.edusphere.assignment.repository.SubmissionRepository;
 import com.edusphere.assignment.service.SubmissionService;
-import feign.FeignException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -56,7 +55,7 @@ public class SubmissionServiceImpl implements SubmissionService {
             throw new CustomException("Submission deadline has passed", HttpStatus.BAD_REQUEST);
         }
 
-        // Step 2: Check enrollment in the course
+        // Step 2: Check enrollment in the course — mandatory, no bypass
         try {
             ClientApiResponse<EnrollmentCheckDto> enrollCheck =
                     enrollmentServiceClient.isEnrolled(studentId, assignment.getCourseId());
@@ -65,11 +64,9 @@ public class SubmissionServiceImpl implements SubmissionService {
             }
         } catch (CustomException e) {
             throw e;
-        } catch (FeignException e) {
-            log.warn("Enrollment service unavailable, skipping check for student {} on assignment {}",
-                    studentId, assignmentId);
         } catch (Exception e) {
-            log.warn("Could not verify enrollment for student {}: {}", studentId, e.getMessage());
+            log.error("Failed to verify student enrollment for assignment {}: {}", assignmentId, e.getMessage());
+            throw new CustomException("Unable to verify enrollment — enrollment service unavailable. Please try again.", HttpStatus.SERVICE_UNAVAILABLE);
         }
 
         // Step 3: Check if already submitted

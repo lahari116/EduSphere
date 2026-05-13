@@ -10,6 +10,8 @@ public interface EnrollmentService {
 
     EnrollmentResponse enroll(EnrollRequest request);
 
+    EnrollmentResponse selfEnroll(UUID userId, String userRole, UUID courseId);
+
     List<EnrollmentResponse> getEnrollmentsByUser(UUID userId);
 
     List<EnrollmentResponse> getEnrollmentsByCourse(UUID courseId);

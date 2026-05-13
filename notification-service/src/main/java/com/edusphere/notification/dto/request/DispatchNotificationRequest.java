@@ -17,6 +17,8 @@ public class DispatchNotificationRequest {
     @NotNull(message = "userId is required")
     private UUID userId;
 
+    private String recipientEmail;
+
     @NotBlank(message = "eventType is required")
     private String eventType;
 

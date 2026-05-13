@@ -31,3 +31,4 @@ app:
     secret: edusphere-internal-svc-2026
   upload:
     path: uploads/syllabi
+    content-path: uploads/course-content

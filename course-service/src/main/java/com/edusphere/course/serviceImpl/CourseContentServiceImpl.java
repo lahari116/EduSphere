@@ -6,56 +6,79 @@ import com.edusphere.course.client.dto.EnrollmentCheckDto;
 import com.edusphere.course.dto.request.AddContentRequest;
 import com.edusphere.course.dto.response.CourseContentResponse;
 import com.edusphere.course.entity.CourseContent;
+import com.edusphere.course.enums.ContentType;
 import com.edusphere.course.exception.CustomException;
 import com.edusphere.course.repository.CourseContentRepository;
 import com.edusphere.course.service.CourseContentService;
-import feign.FeignException;
+import com.edusphere.course.service.FileStorageService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class CourseContentServiceImpl implements com.edusphere.course.service.CourseContentService {
+public class CourseContentServiceImpl implements CourseContentService {
 
     private final CourseContentRepository contentRepository;
     private final EnrollmentServiceClient enrollmentServiceClient;
+    private final FileStorageService fileStorageService;
+
+    @Value("${app.upload.content-path:uploads/course-content}")
+    private String contentUploadPath;
 
     @Override
     @Transactional
     public CourseContentResponse addContent(UUID courseId, AddContentRequest request, UUID instructorId) {
-        // Verify instructor is enrolled in this course before allowing content upload
-        try {
-            ClientApiResponse<EnrollmentCheckDto> enrollCheck =
-                    enrollmentServiceClient.isEnrolled(instructorId, courseId);
-            if (enrollCheck == null || enrollCheck.getData() == null || !enrollCheck.getData().isEnrolled()) {
-                throw new CustomException(
-                        "Instructor is not enrolled in this course. Enroll first to upload content.",
-                        HttpStatus.FORBIDDEN);
-            }
-        } catch (CustomException e) {
-            throw e;
-        } catch (FeignException e) {
-            log.warn("Enrollment service unavailable, skipping enrollment check for instructor {} on course {}",
-                    instructorId, courseId);
-        } catch (Exception e) {
-            log.warn("Could not verify instructor enrollment for course {}: {}", courseId, e.getMessage());
-        }
+        verifyInstructorEnrolled(instructorId, courseId);
 
         CourseContent content = CourseContent.builder()
-                .courseId(courseId).title(request.getTitle())
+                .courseId(courseId)
+                .title(request.getTitle())
                 .contentType(request.getContentType())
                 .filePathOrUrl(request.getFilePathOrUrl())
                 .body(request.getBody())
                 .addedBy(instructorId)
                 .sequenceNumber(request.getSequenceNumber())
+                .build();
+        return toResponse(contentRepository.save(content));
+    }
+
+    @Override
+    @Transactional
+    public CourseContentResponse uploadPdfContent(UUID courseId, String title, int sequenceNumber,
+                                                   MultipartFile file, UUID instructorId) {
+        verifyInstructorEnrolled(instructorId, courseId);
+
+        // Validate it is a PDF
+        String originalName = Objects.requireNonNullElse(file.getOriginalFilename(), "");
+        String contentType = Objects.requireNonNullElse(file.getContentType(), "");
+        if (!originalName.toLowerCase().endsWith(".pdf") && !contentType.equalsIgnoreCase("application/pdf")) {
+            throw new CustomException("Only PDF files are accepted for this endpoint. "
+                    + "Use the regular content endpoint for VIDEO_LINK or NOTE.", HttpStatus.BAD_REQUEST);
+        }
+
+        // Store file: uploads/course-content/{courseId}/{uuid}.pdf
+        String filename = UUID.randomUUID() + ".pdf";
+        String directory = contentUploadPath + "/" + courseId;
+        String storedPath = fileStorageService.storeFile(directory, filename, file);
+
+        CourseContent content = CourseContent.builder()
+                .courseId(courseId)
+                .title(title)
+                .contentType(ContentType.PDF)
+                .filePathOrUrl(storedPath)
+                .addedBy(instructorId)
+                .sequenceNumber(sequenceNumber)
                 .build();
         return toResponse(contentRepository.save(content));
     }
@@ -87,11 +110,37 @@ public class CourseContentServiceImpl implements com.edusphere.course.service.Co
         contentRepository.save(content);
     }
 
+    // ─── helpers ────────────────────────────────────────────────────────────────
+
+    private void verifyInstructorEnrolled(UUID instructorId, UUID courseId) {
+        try {
+            ClientApiResponse<EnrollmentCheckDto> enrollCheck =
+                    enrollmentServiceClient.isEnrolled(instructorId, courseId);
+            if (enrollCheck == null || enrollCheck.getData() == null || !enrollCheck.getData().isEnrolled()) {
+                throw new CustomException(
+                        "Instructor is not enrolled in this course. Enroll first to upload content.",
+                        HttpStatus.FORBIDDEN);
+            }
+        } catch (CustomException e) {
+            throw e;
+        } catch (Exception e) {
+            log.error("Failed to verify instructor enrollment for course {}: {}", courseId, e.getMessage());
+            throw new CustomException(
+                    "Unable to verify enrollment — enrollment service unavailable. Please try again.",
+                    HttpStatus.SERVICE_UNAVAILABLE);
+        }
+    }
+
     private CourseContentResponse toResponse(CourseContent c) {
         return CourseContentResponse.builder()
-                .contentId(c.getContentId()).courseId(c.getCourseId())
-                .title(c.getTitle()).contentType(c.getContentType())
-                .filePathOrUrl(c.getFilePathOrUrl()).body(c.getBody())
-                .addedBy(c.getAddedBy()).sequenceNumber(c.getSequenceNumber()).build();
+                .contentId(c.getContentId())
+                .courseId(c.getCourseId())
+                .title(c.getTitle())
+                .contentType(c.getContentType())
+                .filePathOrUrl(c.getFilePathOrUrl())
+                .body(c.getBody())
+                .addedBy(c.getAddedBy())
+                .sequenceNumber(c.getSequenceNumber())
+                .build();
     }
 }

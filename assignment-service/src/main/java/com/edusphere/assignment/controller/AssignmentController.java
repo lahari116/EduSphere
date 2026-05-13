@@ -2,6 +2,7 @@ package com.edusphere.assignment.controller;
 
 import com.edusphere.assignment.dto.request.CreateAssignmentRequest;
 import com.edusphere.assignment.dto.request.SubmitAssignmentRequest;
+import com.edusphere.assignment.dto.request.UpdateAssignmentRequest;
 import com.edusphere.assignment.dto.response.ApiResponse;
 import com.edusphere.assignment.dto.response.AssignmentDetailResponse;
 import com.edusphere.assignment.dto.response.AssignmentResponse;
@@ -100,6 +101,31 @@ public class AssignmentController {
 
         SubmissionDetailResponse response = submissionService.getSubmission(submissionId);
         return ResponseEntity.ok(ApiResponse.success(response));
+    }
+
+    @PatchMapping("/api/v1/assignments/{assignmentId}")
+    @PreAuthorize("hasRole('INSTRUCTOR')")
+    @Operation(summary = "Update assignment metadata (title, instructions, deadline, time limit)")
+    public ResponseEntity<ApiResponse<AssignmentResponse>> updateAssignment(
+            @PathVariable UUID assignmentId,
+            @RequestHeader("X-User-Id") String userId,
+            @RequestBody UpdateAssignmentRequest request) {
+
+        UUID instructorId = UUID.fromString(userId);
+        AssignmentResponse response = assignmentService.updateAssignment(assignmentId, request, instructorId);
+        return ResponseEntity.ok(ApiResponse.success("Assignment updated successfully", response));
+    }
+
+    @DeleteMapping("/api/v1/assignments/{assignmentId}")
+    @PreAuthorize("hasRole('INSTRUCTOR')")
+    @Operation(summary = "Delete (soft-delete) an assignment — only the creator can delete it")
+    public ResponseEntity<ApiResponse<Void>> deleteAssignment(
+            @PathVariable UUID assignmentId,
+            @RequestHeader("X-User-Id") String userId) {
+
+        UUID instructorId = UUID.fromString(userId);
+        assignmentService.deleteAssignment(assignmentId, instructorId);
+        return ResponseEntity.ok(ApiResponse.success("Assignment deleted successfully", null));
     }
 
     @PatchMapping("/api/v1/submissions/{submissionId}/grade")

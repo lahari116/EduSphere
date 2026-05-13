@@ -126,13 +126,27 @@ public class CourseController {
 
     @PostMapping("/{courseId}/content")
     @PreAuthorize("hasRole('INSTRUCTOR')")
-    @Operation(summary = "Add course content — instructor must be enrolled in this course")
+    @Operation(summary = "Add course content (VIDEO_LINK or NOTE) — instructor must be enrolled")
     public ResponseEntity<ApiResponse<CourseContentResponse>> addContent(
             @PathVariable UUID courseId,
             @Valid @RequestBody AddContentRequest req,
             @RequestHeader("X-User-Id") String instructorId) {
         return ResponseEntity.ok(ApiResponse.success("Content added",
                 contentService.addContent(courseId, req, UUID.fromString(instructorId))));
+    }
+
+    @PostMapping(value = "/{courseId}/content/upload-pdf", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("hasRole('INSTRUCTOR')")
+    @Operation(summary = "Upload a PDF as course content — instructor must be enrolled")
+    public ResponseEntity<ApiResponse<CourseContentResponse>> uploadPdfContent(
+            @PathVariable UUID courseId,
+            @RequestParam("title") String title,
+            @RequestParam(value = "sequenceNumber", defaultValue = "0") int sequenceNumber,
+            @RequestPart("file") MultipartFile file,
+            @RequestHeader("X-User-Id") String instructorId) {
+        return ResponseEntity.ok(ApiResponse.success("PDF content uploaded",
+                contentService.uploadPdfContent(courseId, title, sequenceNumber, file,
+                        UUID.fromString(instructorId))));
     }
 
     @GetMapping("/{courseId}/content")

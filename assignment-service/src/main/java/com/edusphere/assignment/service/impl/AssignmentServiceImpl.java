@@ -9,6 +9,7 @@ import com.edusphere.assignment.client.dto.CourseDto;
 import com.edusphere.assignment.client.dto.EnrollmentCheckDto;
 import com.edusphere.assignment.dto.request.CreateAssignmentRequest;
 import com.edusphere.assignment.dto.request.QuestionRequest;
+import com.edusphere.assignment.dto.request.UpdateAssignmentRequest;
 import com.edusphere.assignment.dto.response.AssignmentDetailResponse;
 import com.edusphere.assignment.dto.response.AssignmentResponse;
 import com.edusphere.assignment.dto.response.QuestionResponse;
@@ -19,7 +20,6 @@ import com.edusphere.assignment.exception.CustomException;
 import com.edusphere.assignment.repository.AssignmentRepository;
 import com.edusphere.assignment.repository.QuestionRepository;
 import com.edusphere.assignment.service.AssignmentService;
-import feign.FeignException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.poi.ss.usermodel.*;
@@ -60,7 +60,7 @@ public class AssignmentServiceImpl implements AssignmentService {
             throw new CustomException("Course is not available for assignment creation", HttpStatus.BAD_REQUEST);
         }
 
-        // 2. Validate instructor is enrolled in the course
+        // 2. Validate instructor is enrolled in the course — mandatory, no bypass
         try {
             ClientApiResponse<EnrollmentCheckDto> enrollCheck =
                     enrollmentServiceClient.isEnrolled(instructorId, request.getCourseId());
@@ -71,10 +71,9 @@ public class AssignmentServiceImpl implements AssignmentService {
             }
         } catch (CustomException e) {
             throw e;
-        } catch (FeignException e) {
-            log.warn("Enrollment service unavailable, skipping instructor enrollment check: {}", e.getMessage());
         } catch (Exception e) {
-            log.warn("Could not verify instructor enrollment: {}", e.getMessage());
+            log.error("Failed to verify instructor enrollment for course {}: {}", request.getCourseId(), e.getMessage());
+            throw new CustomException("Unable to verify enrollment — enrollment service unavailable. Please try again.", HttpStatus.SERVICE_UNAVAILABLE);
         }
 
         Assignment assignment = Assignment.builder()
@@ -140,7 +139,7 @@ public class AssignmentServiceImpl implements AssignmentService {
             throw new CustomException("Course is not available for assignment creation", HttpStatus.BAD_REQUEST);
         }
 
-        // 2. Validate instructor enrollment
+        // 2. Validate instructor enrollment — mandatory, no bypass
         try {
             ClientApiResponse<EnrollmentCheckDto> enrollCheck =
                     enrollmentServiceClient.isEnrolled(instructorId, courseId);
@@ -151,8 +150,9 @@ public class AssignmentServiceImpl implements AssignmentService {
             }
         } catch (CustomException e) {
             throw e;
-        } catch (FeignException e) {
-            log.warn("Enrollment service unavailable, skipping check: {}", e.getMessage());
+        } catch (Exception e) {
+            log.error("Failed to verify instructor enrollment for course {}: {}", courseId, e.getMessage());
+            throw new CustomException("Unable to verify enrollment — enrollment service unavailable. Please try again.", HttpStatus.SERVICE_UNAVAILABLE);
         }
 
         // 3. Parse Excel
@@ -244,6 +244,70 @@ public class AssignmentServiceImpl implements AssignmentService {
                 .questionCount(questions.size())
                 .questions(questionResponses)
                 .build();
+    }
+
+    @Override
+    @Transactional
+    public AssignmentResponse updateAssignment(UUID assignmentId, UpdateAssignmentRequest request, UUID instructorId) {
+        Assignment assignment = assignmentRepository.findById(assignmentId)
+                .orElseThrow(() -> new CustomException("Assignment not found", HttpStatus.NOT_FOUND));
+
+        if (assignment.isDeleted()) {
+            throw new CustomException("Assignment not found", HttpStatus.NOT_FOUND);
+        }
+
+        if (!assignment.getCreatedBy().equals(instructorId)) {
+            throw new CustomException("You can only update assignments you created", HttpStatus.FORBIDDEN);
+        }
+
+        if (request.getTitle() != null && !request.getTitle().isBlank()) {
+            assignment.setTitle(request.getTitle());
+        }
+        if (request.getInstructions() != null) {
+            assignment.setInstructions(request.getInstructions());
+        }
+        if (request.getTimeLimitMinutes() != null) {
+            assignment.setTimeLimitMinutes(request.getTimeLimitMinutes());
+        }
+        if (request.getSubmissionDeadline() != null) {
+            assignment.setSubmissionDeadline(request.getSubmissionDeadline());
+        }
+
+        assignment = assignmentRepository.save(assignment);
+        int questionCount = questionRepository.findByAssignmentIdOrderBySequenceNumber(assignmentId).size();
+        return mapToAssignmentResponse(assignment, questionCount);
+    }
+
+    @Override
+    @Transactional
+    public void deleteAssignment(UUID assignmentId, UUID instructorId) {
+        Assignment assignment = assignmentRepository.findById(assignmentId)
+                .orElseThrow(() -> new CustomException("Assignment not found", HttpStatus.NOT_FOUND));
+
+        if (assignment.isDeleted()) {
+            throw new CustomException("Assignment not found", HttpStatus.NOT_FOUND);
+        }
+
+        if (!assignment.getCreatedBy().equals(instructorId)) {
+            throw new CustomException("You can only delete assignments you created", HttpStatus.FORBIDDEN);
+        }
+
+        assignment.setDeleted(true);
+        assignment.setActive(false);
+        assignmentRepository.save(assignment);
+
+        try {
+            auditServiceClient.createLog(AuditLogRequest.builder()
+                    .actorId(instructorId)
+                    .actorRole("INSTRUCTOR")
+                    .action("ASSIGNMENT_DELETED")
+                    .resourceType("ASSIGNMENT")
+                    .resourceId(assignmentId.toString())
+                    .serviceName("assignment-service")
+                    .build());
+        } catch (Exception e) {
+            log.warn("Failed to create audit log for ASSIGNMENT_DELETED: {}", e.getMessage());
+        }
     }
 
     @Override
