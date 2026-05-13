@@ -31,6 +31,7 @@ public class AuditController {
     private final AuditLogService auditLogService;
 
     @PostMapping("/logs")
+    @PreAuthorize("hasAnyRole('SERVICE', 'ADMIN')")
     public ResponseEntity<ApiResponse<AuditLogResponse>> createLog(
             @RequestBody @Valid CreateAuditLogRequest request) {
         AuditLogResponse response = auditLogService.createLog(request);

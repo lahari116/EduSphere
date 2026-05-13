@@ -53,20 +53,24 @@ public class AssignmentController {
     }
 
     @GetMapping("/api/v1/courses/{courseId}/assignments")
-    @Operation(summary = "Get all assignments for a course")
+    @PreAuthorize("hasAnyRole('STUDENT', 'INSTRUCTOR', 'ADMIN', 'COORDINATOR')")
+    @Operation(summary = "Get all assignments for a course — requester must be enrolled")
     public ResponseEntity<ApiResponse<List<AssignmentResponse>>> getAssignmentsByCourse(
-            @PathVariable UUID courseId) {
+            @PathVariable UUID courseId,
+            @RequestHeader("X-User-Id") String userId) {
 
-        List<AssignmentResponse> assignments = assignmentService.getAssignmentsByCourse(courseId);
+        List<AssignmentResponse> assignments = assignmentService.getAssignmentsByCourse(courseId, UUID.fromString(userId));
         return ResponseEntity.ok(ApiResponse.success(assignments));
     }
 
     @GetMapping("/api/v1/assignments/{assignmentId}")
-    @Operation(summary = "Get assignment details for a student (without correct answers)")
+    @PreAuthorize("hasAnyRole('STUDENT', 'INSTRUCTOR', 'ADMIN', 'COORDINATOR')")
+    @Operation(summary = "Get assignment details — requester must be enrolled in the course")
     public ResponseEntity<ApiResponse<AssignmentDetailResponse>> getAssignmentForStudent(
-            @PathVariable UUID assignmentId) {
+            @PathVariable UUID assignmentId,
+            @RequestHeader("X-User-Id") String userId) {
 
-        AssignmentDetailResponse response = assignmentService.getAssignmentForStudent(assignmentId);
+        AssignmentDetailResponse response = assignmentService.getAssignmentForStudent(assignmentId, UUID.fromString(userId));
         return ResponseEntity.ok(ApiResponse.success(response));
     }
 
