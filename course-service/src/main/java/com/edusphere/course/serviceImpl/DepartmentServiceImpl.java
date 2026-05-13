@@ -48,7 +48,17 @@ public class DepartmentServiceImpl implements DepartmentService {
     @Override
     public DepartmentResponse getDepartmentById(UUID deptId) {
         Department dept = departmentRepository.findById(deptId)
-                .orElseThrow(() -> new CustomException("Department not found", HttpStatus.NOT_FOUND));
+                .orElseThrow(() -> new CustomException("Department not found with id: " + deptId, HttpStatus.NOT_FOUND));
+        return toResponse(dept);
+    }
+
+    @Override
+    public DepartmentResponse getDepartmentByCode(String deptCode) {
+        Department dept = departmentRepository.findByDeptCodeAndDeletedFalse(deptCode.toUpperCase())
+                .orElseThrow(() -> new CustomException(
+                        "Department not found with code: '" + deptCode + "'. "
+                        + "Use GET /api/v1/departments to see all available department codes.",
+                        HttpStatus.NOT_FOUND));
         return toResponse(dept);
     }
 
