@@ -1,85 +1,46 @@
 package com.edusphere.course.exception;
 
+import com.edusphere.course.dto.response.ApiResponse;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
-import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Map;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
-    // ✅ Validation errors (@Valid)
+    @ExceptionHandler(CustomException.class)
+    public ResponseEntity<ApiResponse<Void>> handleCustom(CustomException ex) {
+        return ResponseEntity.status(ex.getStatus())
+                .body(ApiResponse.error(ex.getMessage()));
+    }
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
-    public ResponseEntity<Map<String, Object>> handleValidationErrors(
-            MethodArgumentNotValidException ex) {
-
-        Map<String, String> fieldErrors = new HashMap<>();
-        ex.getBindingResult().getFieldErrors()
-                .forEach(error ->
-                        fieldErrors.put(error.getField(), error.getDefaultMessage())
-                );
-
-        Map<String, Object> response = new HashMap<>();
-        response.put("timestamp", LocalDateTime.now());
-        response.put("status", HttpStatus.BAD_REQUEST.value());
-        response.put("error", "Validation Failed");
-        response.put("errors", fieldErrors);
-
-        return new ResponseEntity<>(response, HttpStatus.BAD_REQUEST);
+    public ResponseEntity<ApiResponse<Map<String, String>>> handleValidation(MethodArgumentNotValidException ex) {
+        Map<String, String> errors = new HashMap<>();
+        ex.getBindingResult().getAllErrors().forEach(e -> {
+            String field = ((FieldError) e).getField();
+            errors.put(field, e.getDefaultMessage());
+        });
+        return ResponseEntity.badRequest()
+                .body(ApiResponse.error("Validation failed", errors));
     }
 
-    // ✅ Resource Not Found (404)
-    @ExceptionHandler(ResourceNotFoundException.class)
-    public ResponseEntity<Map<String, Object>> handleNotFound(
-            ResourceNotFoundException ex) {
-        return buildResponse(ex.getMessage(), HttpStatus.NOT_FOUND);
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<ApiResponse<Void>> handleAccessDenied(AccessDeniedException ex) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(ApiResponse.error("Access denied"));
     }
 
-    // ✅ Duplicate Resource (409)
-    @ExceptionHandler(DuplicateResourceException.class)
-    public ResponseEntity<Map<String, Object>> handleDuplicate(
-            DuplicateResourceException ex) {
-        return buildResponse(ex.getMessage(), HttpStatus.CONFLICT);
-    }
-
-    // ✅ Unauthorized Action (403)
-    @ExceptionHandler(UnauthorizedActionException.class)
-    public ResponseEntity<Map<String, Object>> handleUnauthorized(
-            UnauthorizedActionException ex) {
-        return buildResponse(ex.getMessage(), HttpStatus.FORBIDDEN);
-    }
-
-    // ✅ Invalid Business Operation (400)
-    @ExceptionHandler(InvalidOperationException.class)
-    public ResponseEntity<Map<String, Object>> handleInvalidOperation(
-            InvalidOperationException ex) {
-        return buildResponse(ex.getMessage(), HttpStatus.BAD_REQUEST);
-    }
-
-    // ✅ Fallback
     @ExceptionHandler(Exception.class)
-    public ResponseEntity<Map<String, Object>> handleGeneric(
-            Exception ex) {
-        return buildResponse(
-                "Internal server error occurred",
-                HttpStatus.INTERNAL_SERVER_ERROR
-        );
-    }
-
-    private ResponseEntity<Map<String, Object>> buildResponse(
-            String message, HttpStatus status) {
-
-        Map<String, Object> response = new HashMap<>();
-        response.put("timestamp", LocalDateTime.now());
-        response.put("status", status.value());
-        response.put("error", status.getReasonPhrase());
-        response.put("message", message);
-
-        return new ResponseEntity<>(response, status);
+    public ResponseEntity<ApiResponse<Void>> handleGeneral(Exception ex) {
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(ApiResponse.error("An unexpected error occurred"));
     }
 }

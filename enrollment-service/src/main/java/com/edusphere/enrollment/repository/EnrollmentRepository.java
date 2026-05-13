@@ -1,21 +1,26 @@
 package com.edusphere.enrollment.repository;
- 
+
 import com.edusphere.enrollment.entity.Enrollment;
-import com.edusphere.enrollment.entity.Role;
-
+import com.edusphere.enrollment.enums.UserRole;
 import org.springframework.data.jpa.repository.JpaRepository;
- 
-import java.util.List;
- 
-public interface EnrollmentRepository extends JpaRepository<Enrollment, Long> {
- 
-    List<Enrollment> findByUserIdAndIsDeletedFalse(Long userId);
- 
-    List<Enrollment> findByCourseIdAndIsDeletedFalse(Long courseId);
- 
-    boolean existsByUserIdAndCourseIdAndIsDeletedFalse(Long userId, Long courseId);
- 
-    Enrollment findByUserIdAndCourseIdAndIsDeletedFalse(Long userId, Long courseId);
+import org.springframework.stereotype.Repository;
 
-	boolean existsByUserIdAndCourseIdAndRoleAndIsDeletedFalse(Long userId, Long courseId, Role valueOf);
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
+
+@Repository
+public interface EnrollmentRepository extends JpaRepository<Enrollment, UUID> {
+
+    List<Enrollment> findByUserIdAndIsDeletedFalse(UUID userId);
+
+    List<Enrollment> findByCourseIdAndIsDeletedFalse(UUID courseId);
+
+    Optional<Enrollment> findByUserIdAndCourseIdAndIsDeletedFalse(UUID userId, UUID courseId);
+
+    boolean existsByUserIdAndCourseId(UUID userId, UUID courseId);
+
+    List<Enrollment> findByUserIdAndUserRoleAndIsDeletedFalse(UUID userId, UserRole userRole);
+
+    List<Enrollment> findByCourseIdAndUserRoleAndIsDeletedFalse(UUID courseId, UserRole userRole);
 }
