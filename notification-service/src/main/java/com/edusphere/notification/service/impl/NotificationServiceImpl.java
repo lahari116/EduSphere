@@ -1,93 +1,200 @@
 package com.edusphere.notification.service.impl;
- 
-import com.edusphere.notification.dto.*;
-import com.edusphere.notification.entity.*;
-import com.edusphere.notification.repository.*;
-import com.edusphere.notification.security.JwtUtil;
+
+import com.edusphere.notification.client.IamServiceClient;
+import com.edusphere.notification.client.dto.ClientApiResponse;
+import com.edusphere.notification.client.dto.UserDto;
+import com.edusphere.notification.dto.request.CourseCompletionNotificationRequest;
+import com.edusphere.notification.dto.request.DispatchNotificationRequest;
+import com.edusphere.notification.dto.request.PreferenceEntry;
+import com.edusphere.notification.dto.request.UpdatePreferenceRequest;
+import com.edusphere.notification.dto.response.NotificationResponse;
+import com.edusphere.notification.dto.response.PreferenceResponse;
+import com.edusphere.notification.entity.Notification;
+import com.edusphere.notification.entity.NotificationPreference;
+import com.edusphere.notification.enums.NotificationChannel;
+import com.edusphere.notification.exception.CustomException;
+import com.edusphere.notification.repository.NotificationPreferenceRepository;
+import com.edusphere.notification.repository.NotificationRepository;
 import com.edusphere.notification.service.NotificationService;
- 
-import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatus;
+import org.springframework.mail.SimpleMailMessage;
+import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.stereotype.Service;
- 
-import java.time.LocalDateTime;
+import org.springframework.transaction.annotation.Transactional;
+
 import java.util.List;
- 
+import java.util.Optional;
+import java.util.UUID;
+import java.util.stream.Collectors;
+
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class NotificationServiceImpl implements NotificationService {
- 
+
     private final NotificationRepository notificationRepository;
     private final NotificationPreferenceRepository preferenceRepository;
-    private final JwtUtil jwtUtil;
-    private final HttpServletRequest request;
- 
-    private String getToken() {
-        String header = request.getHeader("Authorization");
-        return header.substring(7);
-    }
- 
-    private Long getUserId() {
-        return jwtUtil.extractUserId(getToken());
-    }
- 
-    private String getRole() {
-        return jwtUtil.extractRole(getToken());
-    }
- 
+    private final JavaMailSender mailSender;
+    private final IamServiceClient iamServiceClient;
+
     @Override
-    public List<Notification> getMyNotifications() {
-        return notificationRepository.findByUserId(getUserId());
-    }
- 
-    @Override
-    public void markAsRead(Long id) {
-        Notification notification = notificationRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Notification not found"));
- 
-        if (!notification.getUserId().equals(getUserId())) {
-            throw new RuntimeException("Unauthorized access");
+    @Transactional
+    public NotificationResponse dispatch(DispatchNotificationRequest request) {
+        Optional<NotificationPreference> prefOpt = preferenceRepository
+                .findByUserIdAndEventType(request.getUserId(), request.getEventType());
+
+        boolean emailEnabled = true;
+        if (prefOpt.isPresent()) {
+            emailEnabled = prefOpt.get().isEmailEnabled();
         }
- 
-        notification.setRead(true);
-        notificationRepository.save(notification);
-    }
- 
-    @Override
-    public NotificationPreference updatePreferences(NotificationPreferenceDTO dto) {
- 
-        Long userId = getUserId();
- 
-        NotificationPreference pref = preferenceRepository.findByUserId(userId)
-                .orElse(NotificationPreference.builder()
-                        .userId(userId)
-                        .build());
- 
-        pref.setEmailEnabled(dto.isEmailEnabled());
-        pref.setPushEnabled(dto.isPushEnabled());
-        pref.setSmsEnabled(dto.isSmsEnabled());
- 
-        return preferenceRepository.save(pref);
-    }
- 
-    @Override
-    public void dispatchNotification(NotificationDispatchDTO dto) {
- 
-        String role = getRole();
- 
-        if (!role.equals("ADMIN") && !role.equals("SYSTEM")) {
-            throw new RuntimeException("Only admin/system allowed");
-        }
- 
+
         Notification notification = Notification.builder()
-                .userId(dto.getUserId())
-                .title(dto.getTitle())
-                .message(dto.getMessage())
-                .type(dto.getType())
-                .read(false)
-                .createdAt(LocalDateTime.now())
+                .userId(request.getUserId())
+                .eventType(request.getEventType())
+                .title(request.getTitle())
+                .body(request.getBody())
+                .channel(request.getChannel() != null ? request.getChannel() : NotificationChannel.BOTH)
+                .isRead(false)
                 .build();
- 
-        notificationRepository.save(notification);
+
+        notification = notificationRepository.save(notification);
+
+        NotificationChannel channel = notification.getChannel();
+        boolean shouldSendEmail = (channel == NotificationChannel.EMAIL || channel == NotificationChannel.BOTH)
+                && emailEnabled;
+
+        if (shouldSendEmail) {
+            try {
+                String recipientEmail = resolveUserEmail(request.getUserId());
+                SimpleMailMessage message = new SimpleMailMessage();
+                message.setTo(recipientEmail);
+                message.setSubject(request.getTitle());
+                message.setText(request.getBody());
+                mailSender.send(message);
+                log.info("Email notification sent to {} for user: {}", recipientEmail, request.getUserId());
+            } catch (Exception e) {
+                log.warn("Failed to send email notification for user {}: {}", request.getUserId(), e.getMessage());
+            }
+        }
+
+        return toNotificationResponse(notification);
+    }
+
+    @Override
+    public List<NotificationResponse> getNotifications(UUID userId) {
+        return notificationRepository.findByUserIdAndDeletedFalseOrderByCreatedAtDesc(userId)
+                .stream()
+                .map(this::toNotificationResponse)
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    @Transactional
+    public NotificationResponse markAsRead(UUID notificationId, UUID userId) {
+        Notification notification = notificationRepository.findByNotificationIdAndUserId(notificationId, userId)
+                .orElseThrow(() -> new CustomException("Notification not found", HttpStatus.NOT_FOUND));
+
+        notification.setRead(true);
+        notification = notificationRepository.save(notification);
+        return toNotificationResponse(notification);
+    }
+
+    @Override
+    @Transactional
+    public List<PreferenceResponse> updatePreferences(UUID userId, UpdatePreferenceRequest request) {
+        if (request.getPreferences() == null) {
+            return getPreferences(userId);
+        }
+
+        for (PreferenceEntry entry : request.getPreferences()) {
+            Optional<NotificationPreference> existing = preferenceRepository
+                    .findByUserIdAndEventType(userId, entry.getEventType());
+
+            if (existing.isPresent()) {
+                NotificationPreference pref = existing.get();
+                pref.setEmailEnabled(entry.isEmailEnabled());
+                preferenceRepository.save(pref);
+            } else {
+                NotificationPreference pref = NotificationPreference.builder()
+                        .userId(userId)
+                        .eventType(entry.getEventType())
+                        .emailEnabled(entry.isEmailEnabled())
+                        .build();
+                preferenceRepository.save(pref);
+            }
+        }
+
+        return getPreferences(userId);
+    }
+
+    @Override
+    public List<PreferenceResponse> getPreferences(UUID userId) {
+        return preferenceRepository.findByUserId(userId)
+                .stream()
+                .map(this::toPreferenceResponse)
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    public long getUnreadCount(UUID userId) {
+        return notificationRepository.countByUserIdAndIsReadFalseAndDeletedFalse(userId);
+    }
+
+    @Override
+    @Transactional
+    public NotificationResponse notifyCourseCompletion(CourseCompletionNotificationRequest request) {
+        String displayName = request.getStudentName() != null ? request.getStudentName() : "Student";
+
+        String title = "Congratulations! You completed \"" + request.getCourseTitle() + "\"";
+        String body = "Dear " + displayName + ",\n\n"
+                + "You have successfully completed all content in the course: " + request.getCourseTitle() + ".\n\n"
+                + "Your dedication and hard work have paid off. Keep up the great work!\n\n"
+                + "— EduSphere Team";
+
+        DispatchNotificationRequest dispatchRequest = DispatchNotificationRequest.builder()
+                .userId(request.getStudentId())
+                .eventType("COURSE_COMPLETED")
+                .title(title)
+                .body(body)
+                .channel(NotificationChannel.BOTH)
+                .build();
+
+        return dispatch(dispatchRequest);
+    }
+
+    private String resolveUserEmail(UUID userId) {
+        try {
+            ClientApiResponse<UserDto> response = iamServiceClient.getUser(userId);
+            if (response != null && response.isSuccess() && response.getData() != null) {
+                return response.getData().getEmail();
+            }
+        } catch (Exception ex) {
+            log.warn("Could not resolve email for userId {}, using fallback: {}", userId, ex.getMessage());
+        }
+        return userId + "@edusphere.edu"; // fallback
+    }
+
+    private NotificationResponse toNotificationResponse(Notification notification) {
+        return NotificationResponse.builder()
+                .notificationId(notification.getNotificationId())
+                .userId(notification.getUserId())
+                .eventType(notification.getEventType())
+                .title(notification.getTitle())
+                .body(notification.getBody())
+                .isRead(notification.isRead())
+                .channel(notification.getChannel())
+                .createdAt(notification.getCreatedAt())
+                .build();
+    }
+
+    private PreferenceResponse toPreferenceResponse(NotificationPreference pref) {
+        return PreferenceResponse.builder()
+                .prefId(pref.getPrefId())
+                .userId(pref.getUserId())
+                .eventType(pref.getEventType())
+                .emailEnabled(pref.isEmailEnabled())
+                .build();
     }
 }

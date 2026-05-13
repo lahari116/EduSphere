@@ -1,9 +1,17 @@
 package com.edusphere.notification.repository;
- 
+
 import com.edusphere.notification.entity.NotificationPreference;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
+
+import java.util.List;
 import java.util.Optional;
- 
-public interface NotificationPreferenceRepository extends JpaRepository<NotificationPreference, Long> {
-    Optional<NotificationPreference> findByUserId(Long userId);
+import java.util.UUID;
+
+@Repository
+public interface NotificationPreferenceRepository extends JpaRepository<NotificationPreference, UUID> {
+
+    List<NotificationPreference> findByUserId(UUID userId);
+
+    Optional<NotificationPreference> findByUserIdAndEventType(UUID userId, String eventType);
 }

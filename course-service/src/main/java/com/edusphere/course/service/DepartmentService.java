@@ -1,21 +1,15 @@
 package com.edusphere.course.service;
- 
-import com.edusphere.course.dto.DepartmentDTO;
+
+import com.edusphere.course.dto.request.CreateDepartmentRequest;
+import com.edusphere.course.dto.response.CourseResponse;
+import com.edusphere.course.dto.response.DepartmentResponse;
+
 import java.util.List;
- 
+import java.util.UUID;
+
 public interface DepartmentService {
- 
-    // Create new department
-    DepartmentDTO createDepartment(DepartmentDTO departmentDTO);
- 
-    // Get all departments
-    List<DepartmentDTO> getAllDepartments();
- 
-    // Get department by ID
-    DepartmentDTO getDepartmentById(Long id);
-
-	void deleteDepartment(Long id);
-
-	DepartmentDTO updateDepartment(Long id, DepartmentDTO dto);
-
+    DepartmentResponse createDepartment(CreateDepartmentRequest request);
+    List<DepartmentResponse> getAllDepartments();
+    DepartmentResponse getDepartmentById(UUID deptId);
+    List<CourseResponse> getCoursesByDepartment(UUID deptId);
 }

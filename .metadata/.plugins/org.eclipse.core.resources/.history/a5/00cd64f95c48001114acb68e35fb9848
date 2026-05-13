@@ -1,0 +1,159 @@
+package com.edusphere.iam.serviceImpl;
+
+import com.edusphere.iam.dto.response.UserResponse;
+import com.edusphere.iam.entity.User;
+import com.edusphere.iam.enums.Role;
+import com.edusphere.iam.exception.CustomException;
+import com.edusphere.iam.repository.UserRepository;
+import com.edusphere.iam.service.AdminService;
+import lombok.RequiredArgsConstructor;
+import org.apache.poi.ss.usermodel.*;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import org.springframework.http.HttpStatus;
+import org.springframework.mail.SimpleMailMessage;
+import org.springframework.mail.javamail.JavaMailSender;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
+
+import java.io.InputStream;
+import java.security.SecureRandom;
+import java.util.*;
+import java.util.stream.Collectors;
+
+@Service
+@RequiredArgsConstructor
+public class AdminServiceImpl implements AdminService {
+
+    private final UserRepository userRepository;
+    private final PasswordEncoder passwordEncoder;
+    private final JavaMailSender mailSender;
+
+    private static final String CHARS = "ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789@#$!";
+
+    @Override
+    @Transactional
+    public Map<String, Object> bulkOnboardUsers(MultipartFile file) {
+        if (file.isEmpty()) {
+            throw new CustomException("Upload file is empty", HttpStatus.BAD_REQUEST);
+        }
+
+        List<UserResponse> created = new ArrayList<>();
+        List<Map<String, String>> errors = new ArrayList<>();
+
+        try (InputStream is = file.getInputStream(); Workbook wb = new XSSFWorkbook(is)) {
+            Sheet sheet = wb.getSheetAt(0);
+            for (int i = 1; i <= sheet.getLastRowNum(); i++) {
+                Row row = sheet.getRow(i);
+                if (row == null) continue;
+
+                String firstName = getCellValue(row, 0);
+                String lastName = getCellValue(row, 1);
+                String email = getCellValue(row, 2);
+                String roleStr = getCellValue(row, 3);
+                String deptCode = getCellValue(row, 4);
+                String empStudentId = getCellValue(row, 5);
+
+                if (email == null || email.isBlank()) continue;
+
+                if (userRepository.existsByEmail(email)) {
+                    errors.add(Map.of("row", String.valueOf(i + 1), "email", email, "reason", "Duplicate email"));
+                    continue;
+                }
+
+                if (empStudentId != null && userRepository.existsByStudentOrEmployeeId(empStudentId)) {
+                    errors.add(Map.of("row", String.valueOf(i + 1), "email", email, "reason", "Duplicate student/employee ID"));
+                    continue;
+                }
+
+                Role role;
+                try {
+                    role = Role.valueOf(roleStr.toUpperCase());
+                } catch (Exception e) {
+                    errors.add(Map.of("row", String.valueOf(i + 1), "email", email, "reason", "Invalid role: " + roleStr));
+                    continue;
+                }
+
+                String tempPassword = generateTempPassword();
+                User user = User.builder()
+                        .firstName(firstName)
+                        .lastName(lastName)
+                        .email(email)
+                        .passwordHash(passwordEncoder.encode(tempPassword))
+                        .role(role)
+                        .studentOrEmployeeId(empStudentId)
+                        .active(true)
+                        .tempPasswordChangeRequired(true)
+                        .consentAccepted(false)
+                        .build();
+                User saved = userRepository.save(user);
+
+                sendOnboardingEmail(email, firstName, tempPassword);
+
+                created.add(UserResponse.builder()
+                        .userId(saved.getUserId())
+                        .firstName(firstName).lastName(lastName)
+                        .email(email).role(role)
+                        .studentOrEmployeeId(empStudentId).active(true)
+                        .build());
+            }
+        } catch (CustomException ce) {
+            throw ce;
+        } catch (Exception e) {
+            throw new CustomException("Failed to process Excel file: " + e.getMessage(), HttpStatus.BAD_REQUEST);
+        }
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("totalCreated", created.size());
+        result.put("totalErrors", errors.size());
+        result.put("createdUsers", created);
+        result.put("errorRows", errors);
+        return result;
+    }
+
+    @Override
+    public List<UserResponse> getAllUsers() {
+        return userRepository.findAll().stream()
+                .filter(u -> !u.isDeleted())
+                .map(u -> UserResponse.builder()
+                        .userId(u.getUserId()).firstName(u.getFirstName()).lastName(u.getLastName())
+                        .email(u.getEmail()).role(u.getRole()).departmentId(u.getDepartmentId())
+                        .studentOrEmployeeId(u.getStudentOrEmployeeId()).active(u.isActive())
+                        .build())
+                .collect(Collectors.toList());
+    }
+
+    private String getCellValue(Row row, int col) {
+        Cell cell = row.getCell(col);
+        if (cell == null) return null;
+        return switch (cell.getCellType()) {
+            case STRING -> cell.getStringCellValue().trim();
+            case NUMERIC -> String.valueOf((long) cell.getNumericCellValue());
+            default -> null;
+        };
+    }
+
+    private String generateTempPassword() {
+        SecureRandom rng = new SecureRandom();
+        return rng.ints(12, 0, CHARS.length())
+                .mapToObj(i -> String.valueOf(CHARS.charAt(i)))
+                .collect(Collectors.joining());
+    }
+
+    private void sendOnboardingEmail(String email, String firstName, String tempPassword) {
+        try {
+            SimpleMailMessage msg = new SimpleMailMessage();
+            msg.setTo(email);
+            msg.setSubject("Welcome to EduSphere!");
+            msg.setText("Dear " + firstName + ",\n\n" +
+                    "Your EduSphere account has been created.\n\n" +
+                    "Login URL: http://localhost:3000/login\n" +
+                    "Email: " + email + "\n" +
+                    "Temporary Password: " + tempPassword + "\n\n" +
+                    "Please change your password immediately after first login.\n\n" +
+                    "EduSphere Team");
+            mailSender.send(msg);
+        } catch (Exception ignored) {}
+    }
+}
