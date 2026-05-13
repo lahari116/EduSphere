@@ -1,27 +1,16 @@
 package com.edusphere.course.service;
- 
-import com.edusphere.course.dto.CourseDTO;
-import com.edusphere.course.dto.DepartmentDTO;
 
-import jakarta.servlet.http.HttpServletRequest;
+import com.edusphere.course.dto.request.CreateCourseRequest;
+import com.edusphere.course.dto.request.UpdateCourseRequest;
+import com.edusphere.course.dto.response.CourseResponse;
 
 import java.util.List;
- 
+import java.util.UUID;
+
 public interface CourseService {
- 
-    List<CourseDTO> getAllCourses();
- 
-    CourseDTO getCourseById(Long id);
- 
-    void assignCourseToDepartment(Long courseId, Long departmentId);
-
-	CourseDTO updateCourse(Long id, CourseDTO dto);
-
-	void deleteCourse(Long id);
-
-	CourseDTO createCourse(CourseDTO dto, HttpServletRequest request);
-
-	List<DepartmentDTO> getDepartmentsByCourse(Long courseId);
-
-	List<CourseDTO> getCoursesByDepartment(Long id);
+    CourseResponse createCourse(CreateCourseRequest request, UUID adminId);
+    List<CourseResponse> getAllCourses();
+    CourseResponse getCourseById(UUID courseId);
+    CourseResponse updateCourse(UUID courseId, UpdateCourseRequest request);
+    void deleteCourse(UUID courseId);
 }

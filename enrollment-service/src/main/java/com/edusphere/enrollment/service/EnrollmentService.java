@@ -1,20 +1,26 @@
 package com.edusphere.enrollment.service;
- 
-import com.edusphere.enrollment.dto.EnrollmentDTO;
-import com.edusphere.enrollment.entity.Enrollment;
- 
-import jakarta.servlet.http.HttpServletRequest;
-import java.util.List;
- 
-public interface EnrollmentService {
- 
-    Enrollment enrollUser(EnrollmentDTO dto, HttpServletRequest request);
- 
-    List<Enrollment> getEnrollmentsByUser(HttpServletRequest request);
- 
-    List<Enrollment> getEnrollmentsByCourse(Long courseId);
- 
-    void removeEnrollment(HttpServletRequest request, Long courseId);
 
-	boolean isUserEnrolled(Long userId, Long courseId, String role);
+import com.edusphere.enrollment.dto.request.EnrollRequest;
+import com.edusphere.enrollment.dto.response.EnrollmentResponse;
+
+import java.util.List;
+import java.util.UUID;
+
+public interface EnrollmentService {
+
+    EnrollmentResponse enroll(EnrollRequest request);
+
+    EnrollmentResponse selfEnroll(UUID userId, String userRole, UUID courseId);
+
+    List<EnrollmentResponse> getEnrollmentsByUser(UUID userId);
+
+    List<EnrollmentResponse> getEnrollmentsByCourse(UUID courseId);
+
+    void unenroll(UUID enrollmentId);
+
+    List<EnrollmentResponse> getStudentEnrollments(UUID studentId);
+
+    List<EnrollmentResponse> getInstructorEnrollments(UUID instructorId);
+
+    boolean isEnrolled(UUID userId, UUID courseId);
 }

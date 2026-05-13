@@ -1,19 +1,27 @@
 package com.edusphere.notification.service;
- 
-import com.edusphere.notification.dto.NotificationDispatchDTO;
-import com.edusphere.notification.dto.NotificationPreferenceDTO;
-import com.edusphere.notification.entity.Notification;
-import com.edusphere.notification.entity.NotificationPreference;
- 
+
+import com.edusphere.notification.dto.request.CourseCompletionNotificationRequest;
+import com.edusphere.notification.dto.request.DispatchNotificationRequest;
+import com.edusphere.notification.dto.request.UpdatePreferenceRequest;
+import com.edusphere.notification.dto.response.NotificationResponse;
+import com.edusphere.notification.dto.response.PreferenceResponse;
+
 import java.util.List;
- 
+import java.util.UUID;
+
 public interface NotificationService {
- 
-    List<Notification> getMyNotifications();
- 
-    void markAsRead(Long id);
- 
-    NotificationPreference updatePreferences(NotificationPreferenceDTO dto);
- 
-    void dispatchNotification(NotificationDispatchDTO dto);
+
+    NotificationResponse dispatch(DispatchNotificationRequest request);
+
+    NotificationResponse notifyCourseCompletion(CourseCompletionNotificationRequest request);
+
+    List<NotificationResponse> getNotifications(UUID userId);
+
+    NotificationResponse markAsRead(UUID notificationId, UUID userId);
+
+    List<PreferenceResponse> updatePreferences(UUID userId, UpdatePreferenceRequest request);
+
+    List<PreferenceResponse> getPreferences(UUID userId);
+
+    long getUnreadCount(UUID userId);
 }

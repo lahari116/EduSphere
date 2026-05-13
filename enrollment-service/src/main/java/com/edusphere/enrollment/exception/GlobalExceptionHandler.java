@@ -1,67 +1,45 @@
 package com.edusphere.enrollment.exception;
 
+import com.edusphere.enrollment.dto.response.ApiResponse;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.validation.FieldError;
+import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.RestControllerAdvice;
 
-import com.edusphere.enrollment.exception.*;
-
-
-import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Map;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
-    private ResponseEntity<Map<String, Object>> buildResponse(
-            HttpStatus status, String message) {
-
-        Map<String, Object> response = new HashMap<>();
-        response.put("timestamp", LocalDateTime.now());
-        response.put("status", status.value());
-        response.put("error", status.getReasonPhrase());
-        response.put("message", message);
-
-        return new ResponseEntity<>(response, status);
+    @ExceptionHandler(CustomException.class)
+    public ResponseEntity<ApiResponse<Void>> handleCustomException(CustomException ex) {
+        return ResponseEntity
+                .status(ex.getStatus())
+                .body(ApiResponse.error(ex.getMessage()));
     }
 
-    @ExceptionHandler(AlreadyEnrolledException.class)
-    public ResponseEntity<Map<String, Object>> handleAlreadyEnrolled(
-            AlreadyEnrolledException ex) {
-        return buildResponse(HttpStatus.CONFLICT, ex.getMessage());
-    }
-
-    @ExceptionHandler(UnauthorizedEnrollmentException.class)
-    public ResponseEntity<Map<String, Object>> handleUnauthorized(
-            UnauthorizedEnrollmentException ex) {
-        return buildResponse(HttpStatus.FORBIDDEN, ex.getMessage());
-    }
-
-    @ExceptionHandler(DepartmentMismatchException.class)
-    public ResponseEntity<Map<String, Object>> handleDepartmentMismatch(
-            DepartmentMismatchException ex) {
-        return buildResponse(HttpStatus.BAD_REQUEST, ex.getMessage());
-    }
-
-    @ExceptionHandler({
-            EnrollmentNotFoundException.class,
-            NoEnrollmentsFoundException.class,
-            ResourceNotFoundException.class
-    })
-    public ResponseEntity<Map<String, Object>> handleNotFound(
-            RuntimeException ex) {
-        return buildResponse(HttpStatus.NOT_FOUND, ex.getMessage());
-    }
-
-    @ExceptionHandler(InvalidRoleException.class)
-    public ResponseEntity<Map<String, Object>> handleInvalidRole(
-            InvalidRoleException ex) {
-        return buildResponse(HttpStatus.BAD_REQUEST, ex.getMessage());
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ResponseEntity<ApiResponse<Map<String, String>>> handleValidationException(
+            MethodArgumentNotValidException ex) {
+        Map<String, String> errors = new HashMap<>();
+        for (FieldError fieldError : ex.getBindingResult().getFieldErrors()) {
+            errors.put(fieldError.getField(), fieldError.getDefaultMessage());
+        }
+        ApiResponse<Map<String, String>> response = ApiResponse.<Map<String, String>>builder()
+                .success(false)
+                .message("Validation failed")
+                .data(errors)
+                .build();
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
     }
 
     @ExceptionHandler(Exception.class)
-    public ResponseEntity<Map<String, Object>> handleGlobal(Exception ex) {
-        return buildResponse(HttpStatus.INTERNAL_SERVER_ERROR, ex.getMessage());
+    public ResponseEntity<ApiResponse<Void>> handleGeneralException(Exception ex) {
+        return ResponseEntity
+                .status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(ApiResponse.error("An unexpected error occurred: " + ex.getMessage()));
     }
 }

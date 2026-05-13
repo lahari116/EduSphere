@@ -1,121 +1,207 @@
 package com.edusphere.course.controller;
 
-import com.edusphere.course.dto.CourseDTO;
-import com.edusphere.course.dto.CourseResourceDTO;
-import com.edusphere.course.dto.CourseResourceRequest;
-import com.edusphere.course.dto.DepartmentDTO;
-import com.edusphere.course.service.CourseResourceService;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import com.edusphere.course.dto.request.AddContentRequest;
+import com.edusphere.course.dto.request.CreateCourseRequest;
+import com.edusphere.course.dto.request.UpdateCourseRequest;
+import com.edusphere.course.dto.response.*;
+import com.edusphere.course.service.ContentCompletionService;
+import com.edusphere.course.service.CourseContentService;
 import com.edusphere.course.service.CourseService;
-
-import jakarta.servlet.http.HttpServletRequest;
+import com.edusphere.course.service.SyllabusService;
+import com.edusphere.course.serviceImpl.CourseDepartmentServiceImpl;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.springframework.validation.annotation.Validated;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
+import java.util.UUID;
 
 @RestController
-@RequestMapping("/api/courses")
+@RequestMapping("/api/v1/courses")
 @RequiredArgsConstructor
-@Validated
+@Tag(name = "Courses")
+@SecurityRequirement(name = "bearerAuth")
 public class CourseController {
 
     private final CourseService courseService;
-    private final CourseResourceService courseResourceService;
+    private final CourseContentService contentService;
+    private final SyllabusService syllabusService;
+    private final ContentCompletionService completionService;
+    private final CourseDepartmentServiceImpl courseDepartmentService;
 
-    // ✅ Delete Course Resource
-    @DeleteMapping("/{courseId}/resources/{resourceId}")
-    public ResponseEntity<String> deleteResource(
-            @PathVariable Long courseId,
-            @PathVariable Long resourceId,
-            HttpServletRequest httpRequest
-    ) {
-        courseResourceService.deleteResource(courseId, resourceId, httpRequest);
-        return ResponseEntity.ok("Resource deleted successfully");
-    }
-
-    // ✅ Add Resource to Course
-    @PostMapping("/courses/{courseId}/resources")
-    public CourseResourceDTO addResource(
-            @PathVariable Long courseId,
-            @Valid @RequestBody CourseResourceRequest request,
-            HttpServletRequest httpRequest
-    ) {
-        return courseResourceService.addResource(courseId, request, httpRequest);
-    }
-
-    // ✅ Get Course Resources
-    @GetMapping("/courses/{courseId}/resources")
-    public List<CourseResourceDTO> getResources(
-            @PathVariable Long courseId,
-            HttpServletRequest httpRequest
-    ) {
-        return courseResourceService.getResourcesByCourse(courseId, httpRequest);
-    }
-
-    // ✅ Get Courses by Department
-    @GetMapping("/departments/{departmentId}/courses")
-    public List<CourseDTO> getCoursesByDepartment(
-            @PathVariable Long departmentId
-    ) {
-        return courseService.getCoursesByDepartment(departmentId);
-    }
-
-    // ✅ Get Departments by Course
-    @GetMapping("/{courseId}/departments")
-    public List<DepartmentDTO> getDepartmentsByCourse(
-            @PathVariable Long courseId
-    ) {
-        return courseService.getDepartmentsByCourse(courseId);
-    }
-
-    // ✅ Delete Course
-    @DeleteMapping("/{id}")
-    public ResponseEntity<String> deleteCourse(@PathVariable Long id) {
-        courseService.deleteCourse(id);
-        return ResponseEntity.ok("Course deleted successfully");
-    }
-
-    // ✅ Update Course (VALIDATION ENABLED)
-    @PutMapping("/{id}")
-    public ResponseEntity<CourseDTO> updateCourse(
-            @PathVariable Long id,
-            @Valid @RequestBody CourseDTO dto
-    ) {
-        return ResponseEntity.ok(courseService.updateCourse(id, dto));
-    }
-
-    // ✅ Create Course (VALIDATION ENABLED)
     @PostMapping
-    public CourseDTO createCourse(
-            @Valid @RequestBody CourseDTO dto,
-            HttpServletRequest request
-    ) {
-        return courseService.createCourse(dto, request);
+    @PreAuthorize("hasRole('ADMIN')")
+    @Operation(summary = "Create course (Admin)")
+    public ResponseEntity<ApiResponse<CourseResponse>> create(
+            @Valid @RequestBody CreateCourseRequest req) {
+        UUID adminId = getCurrentUserId();
+        return ResponseEntity.ok(ApiResponse.success("Course created",
+                courseService.createCourse(req, adminId)));
     }
 
-    // ✅ Get All Courses
     @GetMapping
-    public ResponseEntity<List<CourseDTO>> getAllCourses() {
-        return ResponseEntity.ok(courseService.getAllCourses());
+    @Operation(summary = "List all active courses")
+    public ResponseEntity<ApiResponse<List<CourseResponse>>> getAll() {
+        return ResponseEntity.ok(ApiResponse.success(courseService.getAllCourses()));
     }
 
-    // ✅ Get Course by ID
-    @GetMapping("/{id}")
-    public ResponseEntity<CourseDTO> getCourseById(@PathVariable Long id) {
-        return ResponseEntity.ok(courseService.getCourseById(id));
+    @GetMapping("/{courseId}")
+    @Operation(summary = "Get course by ID")
+    public ResponseEntity<ApiResponse<CourseResponse>> getById(@PathVariable UUID courseId) {
+        return ResponseEntity.ok(ApiResponse.success(courseService.getCourseById(courseId)));
     }
 
-    // ✅ Assign Course to Department
+    @PatchMapping("/{courseId}")
+    @PreAuthorize("hasRole('ADMIN')")
+    @Operation(summary = "Update course (Admin)")
+    public ResponseEntity<ApiResponse<CourseResponse>> update(
+            @PathVariable UUID courseId, @RequestBody UpdateCourseRequest req) {
+        return ResponseEntity.ok(ApiResponse.success("Course updated", courseService.updateCourse(courseId, req)));
+    }
+
+    @DeleteMapping("/{courseId}")
+    @PreAuthorize("hasRole('ADMIN')")
+    @Operation(summary = "Delete course (Admin)")
+    public ResponseEntity<ApiResponse<Void>> delete(@PathVariable UUID courseId) {
+        courseService.deleteCourse(courseId);
+        return ResponseEntity.ok(ApiResponse.success("Course deleted", null));
+    }
+
+    // ── Course-Department Linking (Coordinator) ──────────────────────────────
+
     @PostMapping("/{courseId}/departments/{departmentId}")
-    public ResponseEntity<String> assignCourseToDepartment(
-            @PathVariable Long courseId,
-            @PathVariable Long departmentId
-    ) {
-        courseService.assignCourseToDepartment(courseId, departmentId);
-        return ResponseEntity.ok("Course assigned to department successfully");
+    @PreAuthorize("hasRole('COORDINATOR')")
+    @Operation(summary = "Link course to a department (Coordinator)")
+    public ResponseEntity<ApiResponse<Void>> linkDepartment(
+            @PathVariable UUID courseId,
+            @PathVariable UUID departmentId) {
+        courseDepartmentService.linkCourseToDepartment(courseId, departmentId);
+        return ResponseEntity.ok(ApiResponse.success("Course linked to department", null));
+    }
+
+    @DeleteMapping("/{courseId}/departments/{departmentId}")
+    @PreAuthorize("hasRole('COORDINATOR')")
+    @Operation(summary = "Remove course-department link (Coordinator)")
+    public ResponseEntity<ApiResponse<Void>> unlinkDepartment(
+            @PathVariable UUID courseId,
+            @PathVariable UUID departmentId) {
+        courseDepartmentService.unlinkCourseFromDepartment(courseId, departmentId);
+        return ResponseEntity.ok(ApiResponse.success("Course unlinked from department", null));
+    }
+
+    @GetMapping("/{courseId}/departments")
+    @Operation(summary = "Get departments linked to a course")
+    public ResponseEntity<ApiResponse<List<UUID>>> getLinkedDepartments(@PathVariable UUID courseId) {
+        return ResponseEntity.ok(ApiResponse.success(courseDepartmentService.getDepartmentsByCourse(courseId)));
+    }
+
+    // ── Syllabus ──────────────────────────────────────────────────────────────
+
+    @PostMapping(value = "/{courseId}/syllabus", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("hasRole('COORDINATOR')")
+    @Operation(summary = "Upload syllabus PDF (Coordinator)")
+    public ResponseEntity<ApiResponse<SyllabusResponse>> uploadSyllabus(
+            @PathVariable UUID courseId,
+            @RequestPart("file") MultipartFile file,
+            @RequestHeader("X-User-Id") String coordinatorId) {
+        return ResponseEntity.ok(ApiResponse.success("Syllabus uploaded",
+                syllabusService.uploadSyllabus(courseId, file, UUID.fromString(coordinatorId))));
+    }
+
+    @GetMapping("/{courseId}/syllabus")
+    @Operation(summary = "Get syllabus for course")
+    public ResponseEntity<ApiResponse<SyllabusResponse>> getSyllabus(@PathVariable UUID courseId) {
+        return ResponseEntity.ok(ApiResponse.success(syllabusService.getSyllabus(courseId)));
+    }
+
+    // ── Course Content ─────────────────────────────────────────────────────────
+
+    @PostMapping("/{courseId}/content")
+    @PreAuthorize("hasRole('INSTRUCTOR')")
+    @Operation(summary = "Add course content (VIDEO_LINK or NOTE) — instructor must be enrolled")
+    public ResponseEntity<ApiResponse<CourseContentResponse>> addContent(
+            @PathVariable UUID courseId,
+            @Valid @RequestBody AddContentRequest req,
+            @RequestHeader("X-User-Id") String instructorId) {
+        return ResponseEntity.ok(ApiResponse.success("Content added",
+                contentService.addContent(courseId, req, UUID.fromString(instructorId))));
+    }
+
+    @PostMapping(value = "/{courseId}/content/upload-pdf", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("hasRole('INSTRUCTOR')")
+    @Operation(summary = "Upload a PDF as course content — instructor must be enrolled")
+    public ResponseEntity<ApiResponse<CourseContentResponse>> uploadPdfContent(
+            @PathVariable UUID courseId,
+            @RequestParam("title") String title,
+            @RequestParam(value = "sequenceNumber", defaultValue = "0") int sequenceNumber,
+            @RequestPart("file") MultipartFile file,
+            @RequestHeader("X-User-Id") String instructorId) {
+        return ResponseEntity.ok(ApiResponse.success("PDF content uploaded",
+                contentService.uploadPdfContent(courseId, title, sequenceNumber, file,
+                        UUID.fromString(instructorId))));
+    }
+
+    @GetMapping("/{courseId}/content")
+    @Operation(summary = "List course content")
+    public ResponseEntity<ApiResponse<List<CourseContentResponse>>> listContent(@PathVariable UUID courseId) {
+        return ResponseEntity.ok(ApiResponse.success(contentService.listContent(courseId)));
+    }
+
+    @PatchMapping("/{courseId}/content/{contentId}")
+    @PreAuthorize("hasRole('INSTRUCTOR')")
+    @Operation(summary = "Update content item (Instructor)")
+    public ResponseEntity<ApiResponse<CourseContentResponse>> updateContent(
+            @PathVariable UUID courseId, @PathVariable UUID contentId,
+            @RequestBody AddContentRequest req) {
+        return ResponseEntity.ok(ApiResponse.success("Content updated", contentService.updateContent(contentId, req)));
+    }
+
+    @DeleteMapping("/{courseId}/content/{contentId}")
+    @PreAuthorize("hasRole('INSTRUCTOR')")
+    @Operation(summary = "Delete content item (Instructor)")
+    public ResponseEntity<ApiResponse<Void>> deleteContent(
+            @PathVariable UUID courseId, @PathVariable UUID contentId) {
+        contentService.deleteContent(contentId);
+        return ResponseEntity.ok(ApiResponse.success("Content deleted", null));
+    }
+
+    // ── Content Completion (Student) ──────────────────────────────────────────
+
+    @PostMapping("/{courseId}/content/{contentId}/complete")
+    @PreAuthorize("hasRole('STUDENT')")
+    @Operation(summary = "Mark a content item as complete (Student)")
+    public ResponseEntity<ApiResponse<Void>> markContentComplete(
+            @PathVariable UUID courseId,
+            @PathVariable UUID contentId,
+            @RequestHeader("X-User-Id") String studentId) {
+        completionService.markContentComplete(UUID.fromString(studentId), contentId, courseId);
+        return ResponseEntity.ok(ApiResponse.success("Content marked as complete", null));
+    }
+
+    @GetMapping("/{courseId}/progress")
+    @PreAuthorize("hasRole('STUDENT')")
+    @Operation(summary = "Get student progress for a course (Student)")
+    public ResponseEntity<ApiResponse<CourseProgressResponse>> getCourseProgress(
+            @PathVariable UUID courseId,
+            @RequestHeader("X-User-Id") String studentId) {
+        CourseProgressResponse progress = completionService.getCourseProgress(
+                UUID.fromString(studentId), courseId);
+        return ResponseEntity.ok(ApiResponse.success("Course progress retrieved", progress));
+    }
+
+    private UUID getCurrentUserId() {
+        String userId = (String) org.springframework.security.core.context.SecurityContextHolder
+                .getContext()
+                .getAuthentication()
+                .getPrincipal();
+        return UUID.fromString(userId);
     }
 }
