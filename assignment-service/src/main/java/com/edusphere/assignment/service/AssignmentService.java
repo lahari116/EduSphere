@@ -18,9 +18,9 @@ public interface AssignmentService {
                                                   int timeLimitMinutes, LocalDateTime submissionDeadline,
                                                   UUID instructorId, MultipartFile excelFile);
 
-    List<AssignmentResponse> getAssignmentsByCourse(UUID courseId);
+    List<AssignmentResponse> getAssignmentsByCourse(UUID courseId, UUID requestingUserId);
 
-    AssignmentDetailResponse getAssignmentForStudent(UUID assignmentId);
+    AssignmentDetailResponse getAssignmentForStudent(UUID assignmentId, UUID requestingUserId);
 
     AssignmentResponse updateAssignment(UUID assignmentId, UpdateAssignmentRequest request, UUID instructorId);
 

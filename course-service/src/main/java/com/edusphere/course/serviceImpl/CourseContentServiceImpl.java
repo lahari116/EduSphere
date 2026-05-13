@@ -39,6 +39,12 @@ public class CourseContentServiceImpl implements CourseContentService {
     @Override
     @Transactional
     public CourseContentResponse addContent(UUID courseId, AddContentRequest request, UUID instructorId) {
+        if (ContentType.PDF.equals(request.getContentType())) {
+            throw new CustomException(
+                    "PDF files must be uploaded via POST /{courseId}/content/upload-pdf (multipart). "
+                    + "Use this endpoint only for VIDEO_LINK or NOTE content types.",
+                    HttpStatus.BAD_REQUEST);
+        }
         verifyInstructorEnrolled(instructorId, courseId);
 
         CourseContent content = CourseContent.builder()
@@ -84,7 +90,31 @@ public class CourseContentServiceImpl implements CourseContentService {
     }
 
     @Override
-    public List<CourseContentResponse> listContent(UUID courseId) {
+    public List<CourseContentResponse> listContent(UUID courseId, UUID requestingUserId) {
+        // Verify the requesting user is enrolled in this course before showing content
+        try {
+            ClientApiResponse<EnrollmentCheckDto> enrollCheck =
+                    enrollmentServiceClient.isEnrolled(requestingUserId, courseId);
+            if (enrollCheck == null || enrollCheck.getData() == null || !enrollCheck.getData().isEnrolled()) {
+                throw new CustomException(
+                        "You must be enrolled in this course to view its content.",
+                        HttpStatus.FORBIDDEN);
+            }
+        } catch (CustomException e) {
+            throw e;
+        } catch (Exception e) {
+            log.error("Failed to verify enrollment for course content listing, courseId={}: {}", courseId, e.getMessage());
+            throw new CustomException(
+                    "Unable to verify enrollment — enrollment service unavailable. Please try again.",
+                    HttpStatus.SERVICE_UNAVAILABLE);
+        }
+
+        return contentRepository.findByCourseIdAndDeletedFalseOrderBySequenceNumber(courseId)
+                .stream().map(this::toResponse).collect(Collectors.toList());
+    }
+
+    @Override
+    public List<CourseContentResponse> listContentForAdmin(UUID courseId) {
         return contentRepository.findByCourseIdAndDeletedFalseOrderBySequenceNumber(courseId)
                 .stream().map(this::toResponse).collect(Collectors.toList());
     }

@@ -2,6 +2,7 @@ package com.edusphere.enrollment.controller;
 
 import com.edusphere.enrollment.dto.request.EnrollRequest;
 import com.edusphere.enrollment.dto.response.ApiResponse;
+import com.edusphere.enrollment.dto.response.EnrollmentCheckDto;
 import com.edusphere.enrollment.dto.response.EnrollmentResponse;
 import com.edusphere.enrollment.service.EnrollmentService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -74,11 +75,11 @@ public class EnrollmentController {
 
     @GetMapping("/check")
     @Operation(summary = "Check if a user is enrolled in a course",
-            description = "Returns true/false. Used internally by other services (assignment, course content) to verify enrollment.")
-    public ResponseEntity<ApiResponse<Boolean>> isEnrolled(
+            description = "Returns {enrolled: true/false}. Used internally by assignment-service and course-service to verify enrollment before allowing access.")
+    public ResponseEntity<ApiResponse<EnrollmentCheckDto>> isEnrolled(
             @RequestParam UUID userId,
             @RequestParam UUID courseId) {
         boolean enrolled = enrollmentService.isEnrolled(userId, courseId);
-        return ResponseEntity.ok(ApiResponse.success("Enrollment status retrieved", enrolled));
+        return ResponseEntity.ok(ApiResponse.success("Enrollment status retrieved", new EnrollmentCheckDto(enrolled)));
     }
 }

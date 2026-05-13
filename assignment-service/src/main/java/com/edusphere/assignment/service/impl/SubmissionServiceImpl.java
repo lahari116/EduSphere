@@ -3,10 +3,12 @@ package com.edusphere.assignment.service.impl;
 import com.edusphere.assignment.client.AnalyticsServiceClient;
 import com.edusphere.assignment.client.AuditServiceClient;
 import com.edusphere.assignment.client.EnrollmentServiceClient;
+import com.edusphere.assignment.client.IamServiceClient;
 import com.edusphere.assignment.client.dto.AuditLogRequest;
 import com.edusphere.assignment.client.dto.ClientApiResponse;
 import com.edusphere.assignment.client.dto.EnrollmentCheckDto;
 import com.edusphere.assignment.client.dto.ProgressUpdateRequest;
+import com.edusphere.assignment.client.dto.UserDto;
 import com.edusphere.assignment.dto.request.AnswerRequest;
 import com.edusphere.assignment.dto.request.SubmitAssignmentRequest;
 import com.edusphere.assignment.dto.response.*;
@@ -41,13 +43,30 @@ public class SubmissionServiceImpl implements SubmissionService {
     private final SubmissionRepository submissionRepository;
     private final SubmissionAnswerRepository submissionAnswerRepository;
     private final EnrollmentServiceClient enrollmentServiceClient;
+    private final IamServiceClient iamServiceClient;
     private final AnalyticsServiceClient analyticsServiceClient;
     private final AuditServiceClient auditServiceClient;
 
     @Override
     @Transactional
     public SubmissionDetailResponse submitAssignment(UUID assignmentId, UUID studentId, SubmitAssignmentRequest request) {
-        // Step 1: Load assignment and check deadline
+        // Step 1: Verify student exists and is active in IAM — mandatory, no bypass
+        try {
+            ClientApiResponse<UserDto> userResp = iamServiceClient.getUser(studentId);
+            if (userResp == null || !userResp.isSuccess() || userResp.getData() == null) {
+                throw new CustomException("User not found in the system", HttpStatus.NOT_FOUND);
+            }
+            if (!userResp.getData().isActive()) {
+                throw new CustomException("User account is deactivated", HttpStatus.FORBIDDEN);
+            }
+        } catch (CustomException e) {
+            throw e;
+        } catch (Exception e) {
+            log.error("Failed to verify user existence in IAM service for studentId {}: {}", studentId, e.getMessage());
+            throw new CustomException("Unable to verify user — IAM service unavailable. Please try again.", HttpStatus.SERVICE_UNAVAILABLE);
+        }
+
+        // Step 2: Load assignment and check deadline
         Assignment assignment = assignmentRepository.findById(assignmentId)
                 .orElseThrow(() -> new CustomException("Assignment not found", HttpStatus.NOT_FOUND));
 
@@ -55,7 +74,7 @@ public class SubmissionServiceImpl implements SubmissionService {
             throw new CustomException("Submission deadline has passed", HttpStatus.BAD_REQUEST);
         }
 
-        // Step 2: Check enrollment in the course — mandatory, no bypass
+        // Step 3: Check enrollment in the course — mandatory, no bypass
         try {
             ClientApiResponse<EnrollmentCheckDto> enrollCheck =
                     enrollmentServiceClient.isEnrolled(studentId, assignment.getCourseId());
@@ -69,7 +88,7 @@ public class SubmissionServiceImpl implements SubmissionService {
             throw new CustomException("Unable to verify enrollment — enrollment service unavailable. Please try again.", HttpStatus.SERVICE_UNAVAILABLE);
         }
 
-        // Step 3: Check if already submitted
+        // Step 4: Check if already submitted
         if (submissionRepository.existsByAssignmentIdAndStudentId(assignmentId, studentId)) {
             Submission existing = submissionRepository.findByAssignmentIdAndStudentId(assignmentId, studentId)
                     .orElseThrow();
@@ -78,12 +97,12 @@ public class SubmissionServiceImpl implements SubmissionService {
             }
         }
 
-        // Step 4: Load questions
+        // Step 5: Load questions
         List<Question> questions = questionRepository.findByAssignmentIdOrderBySequenceNumber(assignmentId);
         Map<UUID, Question> questionMap = questions.stream()
                 .collect(Collectors.toMap(Question::getQuestionId, q -> q));
 
-        // Step 5: Grade answers
+        // Step 6: Grade answers
         int correctAnswers = 0;
         int totalQuestions = questions.size();
         List<SubmissionAnswer> submissionAnswers = new ArrayList<>();
@@ -105,10 +124,10 @@ public class SubmissionServiceImpl implements SubmissionService {
                     .build());
         }
 
-        // Step 6: Calculate score
+        // Step 7: Calculate score
         double score = totalQuestions > 0 ? (correctAnswers * 100.0 / totalQuestions) : 0.0;
 
-        // Step 7: Save Submission
+        // Step 8: Save Submission
         Submission submission = submissionRepository
                 .findByAssignmentIdAndStudentId(assignmentId, studentId)
                 .orElse(Submission.builder()
@@ -125,14 +144,14 @@ public class SubmissionServiceImpl implements SubmissionService {
 
         Submission savedSubmission = submissionRepository.save(submission);
 
-        // Step 8: Save SubmissionAnswers
+        // Step 9: Save SubmissionAnswers
         UUID submissionId = savedSubmission.getSubmissionId();
         for (SubmissionAnswer sa : submissionAnswers) {
             sa.setSubmissionId(submissionId);
         }
         List<SubmissionAnswer> savedAnswers = submissionAnswerRepository.saveAll(submissionAnswers);
 
-        // Step 9: Notify analytics service
+        // Step 10: Notify analytics service
         try {
             analyticsServiceClient.updateProgress(ProgressUpdateRequest.builder()
                     .studentId(studentId)
@@ -145,7 +164,7 @@ public class SubmissionServiceImpl implements SubmissionService {
             log.warn("Could not notify analytics service after submission: {}", e.getMessage());
         }
 
-        // Step 9b: Audit log
+        // Step 10b: Audit log
         try {
             auditServiceClient.createLog(AuditLogRequest.builder()
                     .actorId(studentId)
@@ -160,7 +179,7 @@ public class SubmissionServiceImpl implements SubmissionService {
             log.warn("Failed to create audit log for ASSIGNMENT_SUBMITTED: {}", e.getMessage());
         }
 
-        // Step 10: Build response (correctOption shown after submission)
+        // Step 11: Build response (correctOption shown after submission)
         List<AnswerDetailResponse> answerDetailResponses = savedAnswers.stream()
                 .map(sa -> {
                     Question q = questionMap.get(sa.getQuestionId());
