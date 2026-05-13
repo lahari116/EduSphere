@@ -1,8 +1,11 @@
 package com.edusphere.iam.serviceImpl;
 
 import com.edusphere.iam.client.AuditServiceClient;
+import com.edusphere.iam.client.CourseServiceClient;
 import com.edusphere.iam.client.NotificationServiceClient;
 import com.edusphere.iam.client.dto.AuditLogRequest;
+import com.edusphere.iam.client.dto.ClientApiResponse;
+import com.edusphere.iam.client.dto.DepartmentDto;
 import com.edusphere.iam.client.dto.DispatchNotificationRequest;
 import com.edusphere.iam.dto.response.UserResponse;
 import com.edusphere.iam.entity.User;
@@ -35,6 +38,7 @@ public class AdminServiceImpl implements AdminService {
     private final PasswordEncoder passwordEncoder;
     private final AuditServiceClient auditServiceClient;
     private final NotificationServiceClient notificationServiceClient;
+    private final CourseServiceClient courseServiceClient;
 
     private static final String CHARS = "ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789@#$!";
 
@@ -81,6 +85,38 @@ public class AdminServiceImpl implements AdminService {
                     continue;
                 }
 
+                // STUDENT and INSTRUCTOR must have a valid department code
+                UUID departmentId = null;
+                if (role == Role.STUDENT || role == Role.INSTRUCTOR) {
+                    if (deptCode == null || deptCode.isBlank()) {
+                        errors.add(Map.of(
+                                "row", String.valueOf(i + 1),
+                                "email", email,
+                                "reason", "Department code is required for STUDENT and INSTRUCTOR roles. "
+                                        + "Add the dept_code column value (e.g. CS-DEPT). "
+                                        + "Use GET /api/v1/departments to list all available codes."));
+                        continue;
+                    }
+                    try {
+                        ClientApiResponse<DepartmentDto> deptResp = courseServiceClient.getDepartmentByCode(deptCode);
+                        if (deptResp == null || !deptResp.isSuccess() || deptResp.getData() == null) {
+                            errors.add(Map.of(
+                                    "row", String.valueOf(i + 1),
+                                    "email", email,
+                                    "reason", "Department code '" + deptCode + "' does not exist. "
+                                            + "Create it first via POST /api/v1/departments or correct the code."));
+                            continue;
+                        }
+                        departmentId = deptResp.getData().getDeptId();
+                    } catch (Exception e) {
+                        errors.add(Map.of(
+                                "row", String.valueOf(i + 1),
+                                "email", email,
+                                "reason", "Could not verify department '" + deptCode + "': " + e.getMessage()));
+                        continue;
+                    }
+                }
+
                 String tempPassword = generateTempPassword();
                 User user = User.builder()
                         .firstName(firstName)
@@ -88,6 +124,7 @@ public class AdminServiceImpl implements AdminService {
                         .email(email)
                         .passwordHash(passwordEncoder.encode(tempPassword))
                         .role(role)
+                        .departmentId(departmentId)
                         .studentOrEmployeeId(empStudentId)
                         .active(true)
                         .tempPasswordChangeRequired(true)
@@ -100,6 +137,7 @@ public class AdminServiceImpl implements AdminService {
                         .userId(saved.getUserId())
                         .firstName(firstName).lastName(lastName)
                         .email(email).role(role)
+                        .departmentId(departmentId)
                         .studentOrEmployeeId(empStudentId).active(true)
                         .build());
             }
