@@ -45,6 +45,12 @@ public class DepartmentController {
         return ResponseEntity.ok(ApiResponse.success(departmentService.getDepartmentById(deptId)));
     }
 
+    @GetMapping("/by-code/{deptCode}")
+    @Operation(summary = "Get department by its unique code (used by IAM service during user onboarding)")
+    public ResponseEntity<ApiResponse<DepartmentResponse>> getByCode(@PathVariable String deptCode) {
+        return ResponseEntity.ok(ApiResponse.success(departmentService.getDepartmentByCode(deptCode)));
+    }
+
     @GetMapping("/{deptId}/courses")
     @Operation(summary = "Get courses linked to department")
     public ResponseEntity<ApiResponse<List<CourseResponse>>> getCourses(@PathVariable UUID deptId) {

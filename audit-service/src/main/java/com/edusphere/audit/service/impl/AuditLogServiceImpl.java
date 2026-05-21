@@ -95,6 +95,14 @@ public class AuditLogServiceImpl implements AuditLogService {
     }
 
     @Override
+    public List<AuditLogResponse> getAllLogs() {
+        return auditLogRepository.findAllByOrderByTimestampDesc(Pageable.unpaged())
+                .stream()
+                .map(this::toAuditLogResponse)
+                .collect(Collectors.toList());
+    }
+
+    @Override
     public AuditLogResponse getLogById(UUID auditId) {
         AuditLog auditLog = auditLogRepository.findById(auditId)
                 .orElseThrow(() -> new CustomException("Audit log not found", HttpStatus.NOT_FOUND));

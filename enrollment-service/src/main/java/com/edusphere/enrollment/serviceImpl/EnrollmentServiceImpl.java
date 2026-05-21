@@ -15,7 +15,6 @@ import com.edusphere.enrollment.enums.UserRole;
 import com.edusphere.enrollment.exception.CustomException;
 import com.edusphere.enrollment.repository.EnrollmentRepository;
 import com.edusphere.enrollment.service.EnrollmentService;
-import feign.FeignException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -41,8 +40,9 @@ public class EnrollmentServiceImpl implements EnrollmentService {
     @Override
     @Transactional
     public EnrollmentResponse enroll(EnrollRequest request) {
-        // 1. Validate user exists in IAM service
+        // 1. Validate user exists in IAM service — mandatory, no bypass
         UUID userDeptId = null;
+        String iamUserRole = null;
         try {
             ClientApiResponse<UserDto> userResp = iamServiceClient.getUser(request.getUserId());
             if (userResp == null || !userResp.isSuccess() || userResp.getData() == null) {
@@ -53,12 +53,12 @@ public class EnrollmentServiceImpl implements EnrollmentService {
                 throw new CustomException("User account is deactivated", HttpStatus.FORBIDDEN);
             }
             userDeptId = user.getDepartmentId();
+            iamUserRole = user.getRole();
         } catch (CustomException e) {
             throw e;
-        } catch (FeignException e) {
-            log.warn("IAM service unavailable, skipping user existence check: {}", e.getMessage());
         } catch (Exception e) {
-            log.warn("Could not verify user existence: {}", e.getMessage());
+            log.error("Failed to verify user existence in IAM service: {}", e.getMessage());
+            throw new CustomException("Unable to verify user — IAM service unavailable. Please try again.", HttpStatus.SERVICE_UNAVAILABLE);
         }
 
         // 2. Validate course exists and is available
@@ -71,24 +71,37 @@ public class EnrollmentServiceImpl implements EnrollmentService {
             throw new CustomException("Course is not available for enrollment", HttpStatus.BAD_REQUEST);
         }
 
-        // 3. Department validation (skip if isException or user has no dept)
-        if (!request.isException() && userDeptId != null) {
-            try {
-                ClientApiResponse<List<UUID>> deptResp = courseServiceClient.getCourseDepartments(request.getCourseId());
-                if (deptResp != null && deptResp.isSuccess() && deptResp.getData() != null
-                        && !deptResp.getData().isEmpty()) {
-                    List<UUID> courseDeptIds = deptResp.getData();
-                    if (!courseDeptIds.contains(userDeptId)) {
-                        throw new CustomException(
-                                "You can only enroll in courses linked to your department. "
-                                        + "Contact admin for an exception enrollment.",
-                                HttpStatus.FORBIDDEN);
+        // 3. Department validation — enforced for STUDENT/INSTRUCTOR unless isException flag is set
+        if (!request.isException()) {
+            boolean isStudentOrInstructor = "STUDENT".equalsIgnoreCase(iamUserRole)
+                    || "INSTRUCTOR".equalsIgnoreCase(iamUserRole);
+            if (isStudentOrInstructor && userDeptId == null) {
+                throw new CustomException(
+                        "Your account does not have a department assigned. "
+                                + "Contact your administrator to assign a department before enrolling.",
+                        HttpStatus.FORBIDDEN);
+            }
+            if (userDeptId != null) {
+                try {
+                    ClientApiResponse<List<UUID>> deptResp = courseServiceClient.getCourseDepartments(request.getCourseId());
+                    if (deptResp != null && deptResp.isSuccess() && deptResp.getData() != null
+                            && !deptResp.getData().isEmpty()) {
+                        List<UUID> courseDeptIds = deptResp.getData();
+                        if (!courseDeptIds.contains(userDeptId)) {
+                            throw new CustomException(
+                                    "You can only enroll in courses linked to your department. "
+                                            + "Contact your administrator for an exception enrollment.",
+                                    HttpStatus.FORBIDDEN);
+                        }
                     }
+                } catch (CustomException e) {
+                    throw e;
+                } catch (Exception e) {
+                    log.error("Could not verify course departments for course {}: {}", request.getCourseId(), e.getMessage());
+                    throw new CustomException(
+                            "Unable to verify course department restrictions — course service unavailable. Please try again.",
+                            HttpStatus.SERVICE_UNAVAILABLE);
                 }
-            } catch (CustomException e) {
-                throw e;
-            } catch (Exception e) {
-                log.warn("Could not verify course departments: {}", e.getMessage());
             }
         }
 
@@ -123,6 +136,27 @@ public class EnrollmentServiceImpl implements EnrollmentService {
         }
 
         return toResponse(saved);
+    }
+
+    @Override
+    @Transactional
+    public EnrollmentResponse selfEnroll(UUID userId, String userRole, UUID courseId) {
+        UserRole role;
+        try {
+            role = UserRole.valueOf(userRole.toUpperCase());
+        } catch (Exception e) {
+            throw new CustomException("Invalid role: " + userRole, HttpStatus.BAD_REQUEST);
+        }
+        if (role != UserRole.STUDENT && role != UserRole.INSTRUCTOR) {
+            throw new CustomException("Only STUDENT and INSTRUCTOR can self-enroll", HttpStatus.FORBIDDEN);
+        }
+        EnrollRequest request = EnrollRequest.builder()
+                .userId(userId)
+                .courseId(courseId)
+                .userRole(role)
+                .isException(false)
+                .build();
+        return enroll(request);
     }
 
     @Override

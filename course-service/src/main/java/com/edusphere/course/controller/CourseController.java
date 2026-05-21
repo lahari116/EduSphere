@@ -126,7 +126,7 @@ public class CourseController {
 
     @PostMapping("/{courseId}/content")
     @PreAuthorize("hasRole('INSTRUCTOR')")
-    @Operation(summary = "Add course content — instructor must be enrolled in this course")
+    @Operation(summary = "Add course content (VIDEO_LINK or NOTE) — instructor must be enrolled")
     public ResponseEntity<ApiResponse<CourseContentResponse>> addContent(
             @PathVariable UUID courseId,
             @Valid @RequestBody AddContentRequest req,
@@ -135,10 +135,45 @@ public class CourseController {
                 contentService.addContent(courseId, req, UUID.fromString(instructorId))));
     }
 
+    @PostMapping(value = "/{courseId}/content/upload-pdf", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("hasRole('INSTRUCTOR')")
+    @Operation(summary = "Upload a PDF file as course content — instructor must be enrolled in the course")
+    public ResponseEntity<ApiResponse<CourseContentResponse>> uploadPdfContent(
+            @PathVariable UUID courseId,
+            @RequestParam("title") String title,
+            @RequestParam(value = "sequenceNumber", defaultValue = "0") int sequenceNumber,
+            @RequestPart("file") MultipartFile file,
+            @RequestHeader("X-User-Id") String instructorId) {
+        return ResponseEntity.ok(ApiResponse.success("PDF content uploaded",
+                contentService.uploadPdfContent(courseId, title, sequenceNumber, file,
+                        UUID.fromString(instructorId))));
+    }
+
+    @PostMapping("/{courseId}/content/add")
+    @PreAuthorize("hasRole('INSTRUCTOR')")
+    @Operation(summary = "Add VIDEO_LINK or NOTE content (not PDF — use upload-pdf for PDFs)")
+    public ResponseEntity<ApiResponse<CourseContentResponse>> addNonPdfContent(
+            @PathVariable UUID courseId,
+            @Valid @RequestBody AddContentRequest req,
+            @RequestHeader("X-User-Id") String instructorId) {
+        return ResponseEntity.ok(ApiResponse.success("Content added",
+                contentService.addContent(courseId, req, UUID.fromString(instructorId))));
+    }
+
     @GetMapping("/{courseId}/content")
-    @Operation(summary = "List course content")
-    public ResponseEntity<ApiResponse<List<CourseContentResponse>>> listContent(@PathVariable UUID courseId) {
-        return ResponseEntity.ok(ApiResponse.success(contentService.listContent(courseId)));
+    @PreAuthorize("hasAnyRole('STUDENT', 'INSTRUCTOR', 'ADMIN', 'COORDINATOR')")
+    @Operation(summary = "List course content — user must be enrolled (ADMIN/COORDINATOR bypass enrollment check)")
+    public ResponseEntity<ApiResponse<List<CourseContentResponse>>> listContent(
+            @PathVariable UUID courseId,
+            @RequestHeader("X-User-Id") String userId,
+            @RequestHeader("X-User-Role") String userRole) {
+        // ADMIN and COORDINATOR can view course content without enrollment
+        if ("ADMIN".equalsIgnoreCase(userRole) || "COORDINATOR".equalsIgnoreCase(userRole)) {
+            return ResponseEntity.ok(ApiResponse.success(
+                    contentService.listContentForAdmin(courseId)));
+        }
+        return ResponseEntity.ok(ApiResponse.success(
+                contentService.listContent(courseId, UUID.fromString(userId))));
     }
 
     @PatchMapping("/{courseId}/content/{contentId}")

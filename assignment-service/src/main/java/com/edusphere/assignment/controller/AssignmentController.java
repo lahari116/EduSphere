@@ -2,6 +2,7 @@ package com.edusphere.assignment.controller;
 
 import com.edusphere.assignment.dto.request.CreateAssignmentRequest;
 import com.edusphere.assignment.dto.request.SubmitAssignmentRequest;
+import com.edusphere.assignment.dto.request.UpdateAssignmentRequest;
 import com.edusphere.assignment.dto.response.ApiResponse;
 import com.edusphere.assignment.dto.response.AssignmentDetailResponse;
 import com.edusphere.assignment.dto.response.AssignmentResponse;
@@ -52,20 +53,24 @@ public class AssignmentController {
     }
 
     @GetMapping("/api/v1/courses/{courseId}/assignments")
-    @Operation(summary = "Get all assignments for a course")
+    @PreAuthorize("hasAnyRole('STUDENT', 'INSTRUCTOR', 'ADMIN', 'COORDINATOR')")
+    @Operation(summary = "Get all assignments for a course — requester must be enrolled")
     public ResponseEntity<ApiResponse<List<AssignmentResponse>>> getAssignmentsByCourse(
-            @PathVariable UUID courseId) {
+            @PathVariable UUID courseId,
+            @RequestHeader("X-User-Id") String userId) {
 
-        List<AssignmentResponse> assignments = assignmentService.getAssignmentsByCourse(courseId);
+        List<AssignmentResponse> assignments = assignmentService.getAssignmentsByCourse(courseId, UUID.fromString(userId));
         return ResponseEntity.ok(ApiResponse.success(assignments));
     }
 
     @GetMapping("/api/v1/assignments/{assignmentId}")
-    @Operation(summary = "Get assignment details for a student (without correct answers)")
+    @PreAuthorize("hasAnyRole('STUDENT', 'INSTRUCTOR', 'ADMIN', 'COORDINATOR')")
+    @Operation(summary = "Get assignment details — requester must be enrolled in the course")
     public ResponseEntity<ApiResponse<AssignmentDetailResponse>> getAssignmentForStudent(
-            @PathVariable UUID assignmentId) {
+            @PathVariable UUID assignmentId,
+            @RequestHeader("X-User-Id") String userId) {
 
-        AssignmentDetailResponse response = assignmentService.getAssignmentForStudent(assignmentId);
+        AssignmentDetailResponse response = assignmentService.getAssignmentForStudent(assignmentId, UUID.fromString(userId));
         return ResponseEntity.ok(ApiResponse.success(response));
     }
 
@@ -100,6 +105,31 @@ public class AssignmentController {
 
         SubmissionDetailResponse response = submissionService.getSubmission(submissionId);
         return ResponseEntity.ok(ApiResponse.success(response));
+    }
+
+    @PatchMapping("/api/v1/assignments/{assignmentId}")
+    @PreAuthorize("hasRole('INSTRUCTOR')")
+    @Operation(summary = "Update assignment metadata (title, instructions, deadline, time limit)")
+    public ResponseEntity<ApiResponse<AssignmentResponse>> updateAssignment(
+            @PathVariable UUID assignmentId,
+            @RequestHeader("X-User-Id") String userId,
+            @RequestBody UpdateAssignmentRequest request) {
+
+        UUID instructorId = UUID.fromString(userId);
+        AssignmentResponse response = assignmentService.updateAssignment(assignmentId, request, instructorId);
+        return ResponseEntity.ok(ApiResponse.success("Assignment updated successfully", response));
+    }
+
+    @DeleteMapping("/api/v1/assignments/{assignmentId}")
+    @PreAuthorize("hasRole('INSTRUCTOR')")
+    @Operation(summary = "Delete (soft-delete) an assignment — only the creator can delete it")
+    public ResponseEntity<ApiResponse<Void>> deleteAssignment(
+            @PathVariable UUID assignmentId,
+            @RequestHeader("X-User-Id") String userId) {
+
+        UUID instructorId = UUID.fromString(userId);
+        assignmentService.deleteAssignment(assignmentId, instructorId);
+        return ResponseEntity.ok(ApiResponse.success("Assignment deleted successfully", null));
     }
 
     @PatchMapping("/api/v1/submissions/{submissionId}/grade")

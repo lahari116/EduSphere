@@ -13,5 +13,4 @@ public interface AuthService {
     void resetPassword(ResetPasswordRequest request);
     void changePassword(String userId, ChangePasswordRequest request);
     boolean validateToken(String token);
-    AuthResponse acceptConsent(String userId, ConsentRequest request, String ipAddress, HttpServletResponse response);
 }

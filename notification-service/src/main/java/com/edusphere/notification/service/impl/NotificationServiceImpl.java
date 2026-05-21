@@ -67,7 +67,9 @@ public class NotificationServiceImpl implements NotificationService {
 
         if (shouldSendEmail) {
             try {
-                String recipientEmail = resolveUserEmail(request.getUserId());
+                String recipientEmail = (request.getRecipientEmail() != null && !request.getRecipientEmail().isBlank())
+                        ? request.getRecipientEmail()
+                        : resolveUserEmail(request.getUserId());
                 SimpleMailMessage message = new SimpleMailMessage();
                 message.setTo(recipientEmail);
                 message.setSubject(request.getTitle());

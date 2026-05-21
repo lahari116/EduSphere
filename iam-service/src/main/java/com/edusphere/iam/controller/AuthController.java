@@ -9,7 +9,6 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -67,16 +66,4 @@ public class AuthController {
         return ResponseEntity.ok(ApiResponse.success("Password reset successfully", null));
     }
 
-    @PostMapping("/consent")
-    @Operation(summary = "Accept Terms & Privacy Policy — returns a new token with consentAccepted=true",
-            security = @SecurityRequirement(name = "bearerAuth"))
-    public ResponseEntity<ApiResponse<AuthResponse>> acceptConsent(
-            @Valid @RequestBody ConsentRequest request,
-            @RequestHeader("X-User-Id") String userId,
-            HttpServletRequest httpRequest,
-            HttpServletResponse httpResponse) {
-        String ipAddress = httpRequest.getRemoteAddr();
-        AuthResponse authResponse = authService.acceptConsent(userId, request, ipAddress, httpResponse);
-        return ResponseEntity.ok(ApiResponse.success("Consent recorded — use the new accessToken for all future requests", authResponse));
-    }
 }

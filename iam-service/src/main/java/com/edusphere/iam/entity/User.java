@@ -52,10 +52,4 @@ public class User extends BaseEntity {
 
     @Column(name = "temp_password_change_required", nullable = false)
     private boolean tempPasswordChangeRequired = false;
-
-    @Column(name = "consent_accepted", nullable = false)
-    private boolean consentAccepted = false;
-
-    @Column(name = "consent_version")
-    private String consentVersion;
 }

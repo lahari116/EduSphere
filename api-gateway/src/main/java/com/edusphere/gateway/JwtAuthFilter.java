@@ -33,13 +33,6 @@ public class JwtAuthFilter implements GlobalFilter, Ordered {
             "/v3/api-docs"
     );
 
-    // Paths that require a valid token but are exempt from the consent check
-    private static final List<String> CONSENT_EXEMPT_PATHS = List.of(
-            "/api/v1/auth/consent",
-            "/api/v1/auth/logout",
-            "/api/v1/auth/validate"
-    );
-
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
         String path = exchange.getRequest().getURI().getPath();
@@ -59,22 +52,11 @@ public class JwtAuthFilter implements GlobalFilter, Ordered {
             SecretKey key = Keys.hmacShaKeyFor(jwtSecret.getBytes(StandardCharsets.UTF_8));
             Claims claims = Jwts.parser().verifyWith(key).build().parseSignedClaims(token).getPayload();
 
-            Boolean consentAccepted = claims.get("consentAccepted", Boolean.class);
-            boolean isConsentExempt = CONSENT_EXEMPT_PATHS.stream().anyMatch(path::startsWith);
-
-            if ((consentAccepted == null || !consentAccepted) && !isConsentExempt) {
-                exchange.getResponse().setStatusCode(HttpStatus.FORBIDDEN);
-                exchange.getResponse().getHeaders().add("Content-Type", "application/json");
-                var body = "{\"success\":false,\"message\":\"Please accept the Terms & Conditions before using the platform. Call POST /api/v1/auth/consent\",\"data\":null}";
-                var buffer = exchange.getResponse().bufferFactory().wrap(body.getBytes(java.nio.charset.StandardCharsets.UTF_8));
-                return exchange.getResponse().writeWith(reactor.core.publisher.Mono.just(buffer));
-            }
-
             ServerWebExchange mutatedExchange = exchange.mutate()
-                    .request(r -> r.header("X-User-Id", claims.getSubject())
+                    .request(r -> r
+                            .header("X-User-Id", claims.getSubject())
                             .header("X-User-Role", claims.get("role", String.class))
-                            .header("X-User-Email", claims.get("email", String.class))
-                            .header("X-Consent-Accepted", String.valueOf(consentAccepted != null && consentAccepted)))
+                            .header("X-User-Email", claims.get("email", String.class)))
                     .build();
             return chain.filter(mutatedExchange);
         } catch (Exception e) {

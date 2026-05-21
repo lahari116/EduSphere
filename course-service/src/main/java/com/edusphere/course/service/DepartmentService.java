@@ -11,5 +11,6 @@ public interface DepartmentService {
     DepartmentResponse createDepartment(CreateDepartmentRequest request);
     List<DepartmentResponse> getAllDepartments();
     DepartmentResponse getDepartmentById(UUID deptId);
+    DepartmentResponse getDepartmentByCode(String deptCode);
     List<CourseResponse> getCoursesByDepartment(UUID deptId);
 }

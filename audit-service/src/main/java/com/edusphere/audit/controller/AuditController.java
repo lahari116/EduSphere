@@ -7,6 +7,8 @@ import com.edusphere.audit.dto.response.ApiResponse;
 import com.edusphere.audit.dto.response.AuditLogResponse;
 import com.edusphere.audit.dto.response.ExportResponse;
 import com.edusphere.audit.service.AuditLogService;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -16,16 +18,20 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1/audit")
 @RequiredArgsConstructor
+@Tag(name = "Audit Logs", description = "Tamper-evident audit log management (Admin only)")
+@SecurityRequirement(name = "bearerAuth")
 public class AuditController {
 
     private final AuditLogService auditLogService;
 
     @PostMapping("/logs")
+    @PreAuthorize("hasAnyRole('SERVICE', 'ADMIN')")
     public ResponseEntity<ApiResponse<AuditLogResponse>> createLog(
             @RequestBody @Valid CreateAuditLogRequest request) {
         AuditLogResponse response = auditLogService.createLog(request);
@@ -53,6 +59,13 @@ public class AuditController {
 
         Page<AuditLogResponse> logs = auditLogService.searchLogs(searchRequest, page, size);
         return ResponseEntity.ok(ApiResponse.success("Audit logs retrieved", logs));
+    }
+
+    @GetMapping("/logs/all")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<ApiResponse<List<AuditLogResponse>>> getAllLogs() {
+        List<AuditLogResponse> logs = auditLogService.getAllLogs();
+        return ResponseEntity.ok(ApiResponse.success("All audit logs retrieved", logs));
     }
 
     @GetMapping("/logs/{auditId}")

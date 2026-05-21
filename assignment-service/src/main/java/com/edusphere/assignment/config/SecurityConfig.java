@@ -41,9 +41,10 @@ public class SecurityConfig {
                         .requestMatchers(PERMIT_ALL_PATHS).permitAll()
                         .anyRequest().authenticated()
                 )
-                .addFilterBefore(gatewayHeaderAuthFilter, UsernamePasswordAuthenticationFilter.class)
-                .addFilterBefore(serviceAuthFilter, UsernamePasswordAuthenticationFilter.class)
-                .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
+                // Explicit order: GatewayHeader → Service → Jwt → UsernamePassword
+                .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)
+                .addFilterBefore(serviceAuthFilter, com.edusphere.assignment.security.JwtAuthFilter.class)
+                .addFilterBefore(gatewayHeaderAuthFilter, com.edusphere.assignment.security.ServiceAuthFilter.class);
 
         return http.build();
     }

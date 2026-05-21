@@ -7,7 +7,7 @@ spring:
   datasource:
     url: jdbc:mysql://localhost:3306/edusphere_iam?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
     username: root
-    password: sony2005
+    password: root
     driver-class-name: com.mysql.cj.jdbc.Driver
   jpa:
     hibernate:
@@ -39,7 +39,7 @@ eureka:
 app:
   jwt:
     secret: edusphere-jwt-secret-key-must-be-at-least-256-bits-long-for-hs256-algorithm
-    expiration-ms: 900000
+    expiration-ms: 3600000
     refresh-expiration-ms: 604800000
   service:
     secret: edusphere-internal-svc-2026
