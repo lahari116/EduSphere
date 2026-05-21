@@ -1,11 +1,11 @@
 server:
-  port: 8087
+  port: 8081
 
 spring:
   application:
-    name: notification-service
+    name: iam-service
   datasource:
-    url: jdbc:mysql://localhost:3306/edusphere_notification?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+    url: jdbc:mysql://localhost:3306/edusphere_iam?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
     username: root
     password: root
     driver-class-name: com.mysql.cj.jdbc.Driver
@@ -15,23 +15,19 @@ spring:
     show-sql: false
     properties:
       hibernate:
-        dialect: org.hibernate.dialect.MySQLDialect
+        dialect: org.hibernate.dialect.MySQL8Dialect
         format_sql: true
   mail:
     host: smtp.gmail.com
     port: 587
-    username: k.laharireddy2005@gmail.com
-    password: oyae xbpv cvjs ogaj
+    username: 
+    password: 
     properties:
       mail:
         smtp:
           auth: true
           starttls:
             enable: true
-            required: true
-          connectiontimeout: 5000
-          timeout: 5000
-          writetimeout: 5000
 
 eureka:
   client:
@@ -43,11 +39,20 @@ eureka:
 app:
   jwt:
     secret: edusphere-jwt-secret-key-must-be-at-least-256-bits-long-for-hs256-algorithm
+    expiration-ms: 3600000
+    refresh-expiration-ms: 604800000
   service:
     secret: edusphere-internal-svc-2026
+  frontend-url: http://localhost:3000
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
 
 management:
   endpoints:
     web:
       exposure:
-        include: health,info,metrics
+        include: health,info
