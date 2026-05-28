@@ -5,21 +5,27 @@ import Modal from '../../components/common/Modal'
 import Badge from '../../components/common/Badge'
 import {
   User, Mail, ShieldCheck, IdCard, KeyRound,
-  CheckCircle2, Eye, EyeOff, ArrowRight,
+  CheckCircle2, Eye, EyeOff, ArrowRight, Edit3,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import clsx from 'clsx'
 
 const ROLE_COLORS = {
-  STUDENT:     { badge: 'blue',   bg: 'from-blue-500 to-indigo-600' },
-  INSTRUCTOR:  { badge: 'green',  bg: 'from-emerald-500 to-teal-600' },
-  COORDINATOR: { badge: 'amber',  bg: 'from-amber-500 to-orange-500' },
-  ADMIN:       { badge: 'rose',   bg: 'from-rose-500 to-pink-600' },
+  STUDENT:     { badge: 'blue',   bg: 'from-blue-500 to-indigo-600',    light: 'bg-blue-50', text: 'text-blue-700' },
+  INSTRUCTOR:  { badge: 'green',  bg: 'from-emerald-500 to-teal-600',   light: 'bg-emerald-50', text: 'text-emerald-700' },
+  COORDINATOR: { badge: 'amber',  bg: 'from-amber-500 to-orange-500',   light: 'bg-amber-50', text: 'text-amber-700' },
+  ADMIN:       { badge: 'rose',   bg: 'from-rose-500 to-pink-600',      light: 'bg-rose-50', text: 'text-rose-700' },
 }
 
-// ─── Change-password modal (3 steps: request OTP → enter OTP+new pass → done)
+const ROLE_LABELS = {
+  STUDENT: 'Student',
+  INSTRUCTOR: 'Instructor',
+  COORDINATOR: 'Coordinator',
+  ADMIN: 'Administrator',
+}
+
 function ChangePasswordModal({ open, onClose, email }) {
-  const [step, setStep]         = useState(1)   // 1=email confirm, 2=otp+new pass, 3=done
+  const [step, setStep]         = useState(1)
   const [otp, setOtp]           = useState('')
   const [newPassword, setNewPw] = useState('')
   const [confirm, setConfirm]   = useState('')
@@ -78,24 +84,12 @@ function ChangePasswordModal({ open, onClose, email }) {
         <div className="space-y-4">
           <div>
             <label className="label">OTP Code</label>
-            <input
-              value={otp}
-              onChange={(e) => setOtp(e.target.value)}
-              placeholder="Enter OTP from email"
-              className="input font-mono tracking-widest text-center text-lg"
-              maxLength={8}
-            />
+            <input value={otp} onChange={(e) => setOtp(e.target.value)} placeholder="Enter OTP from email" className="input font-mono tracking-widest text-center text-lg" maxLength={8} />
           </div>
           <div>
             <label className="label">New Password</label>
             <div className="relative">
-              <input
-                type={showPw ? 'text' : 'password'}
-                value={newPassword}
-                onChange={(e) => setNewPw(e.target.value)}
-                placeholder="Min. 6 characters"
-                className="input pr-10"
-              />
+              <input type={showPw ? 'text' : 'password'} value={newPassword} onChange={(e) => setNewPw(e.target.value)} placeholder="Min. 6 characters" className="input pr-10" />
               <button type="button" onClick={() => setShowPw(!showPw)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">
                 {showPw ? <EyeOff size={15} /> : <Eye size={15} />}
               </button>
@@ -103,13 +97,7 @@ function ChangePasswordModal({ open, onClose, email }) {
           </div>
           <div>
             <label className="label">Confirm New Password</label>
-            <input
-              type={showPw ? 'text' : 'password'}
-              value={confirm}
-              onChange={(e) => setConfirm(e.target.value)}
-              placeholder="Re-enter new password"
-              className="input"
-            />
+            <input type={showPw ? 'text' : 'password'} value={confirm} onChange={(e) => setConfirm(e.target.value)} placeholder="Re-enter new password" className="input" />
           </div>
           <div className="flex gap-3">
             <button onClick={handleClose} className="btn-secondary flex-1">Cancel</button>
@@ -139,79 +127,101 @@ function ChangePasswordModal({ open, onClose, email }) {
   )
 }
 
-// ─── Main Profile page
 export default function Profile() {
   const { user } = useAuth()
   const [changePwOpen, setChangePwOpen] = useState(false)
 
   const roleConfig = ROLE_COLORS[user?.role] || ROLE_COLORS.STUDENT
+  const roleLabel  = ROLE_LABELS[user?.role]  || user?.role
+
+  const fullName = `${user?.firstName ?? ''} ${user?.lastName ?? ''}`.trim() || '—'
+  const initials = `${user?.firstName?.[0] ?? ''}${user?.lastName?.[0] ?? ''}`.toUpperCase()
 
   const infoRows = [
-    { icon: User,       label: 'Full Name',  value: `${user?.firstName ?? ''} ${user?.lastName ?? ''}`.trim() || '—' },
-    { icon: Mail,       label: 'Email',      value: user?.email || '—' },
-    { icon: ShieldCheck,label: 'Role',       value: user?.role || '—', badge: true },
-    { icon: IdCard,     label: 'User ID',    value: user?.userId ? `${user.userId.slice(0, 18)}…` : '—', mono: true },
+    { icon: User,       label: 'Full Name',             value: fullName },
+    { icon: Mail,       label: 'Email Address',         value: user?.email || '—' },
+    { icon: ShieldCheck,label: 'Role',                  value: user?.role || '—', badge: true },
+    { icon: IdCard,     label: 'Employee / Student ID', value: user?.studentOrEmployeeId || '—', mono: true },
   ]
 
   return (
     <div className="max-w-2xl space-y-6 animate-fade-in">
       {/* Profile banner */}
-      <div className={clsx('relative overflow-hidden rounded-2xl bg-gradient-to-r p-6 text-white', roleConfig.bg)}>
-        <div className="absolute right-0 top-0 w-48 h-full opacity-10">
+      <div className={clsx('relative overflow-hidden rounded-2xl bg-gradient-to-br p-0 text-white', roleConfig.bg)}>
+        {/* Decorative circles */}
+        <div className="absolute right-0 top-0 w-56 h-full opacity-10 pointer-events-none">
           <div className="absolute right-[-20px] top-[-20px] w-40 h-40 rounded-full bg-white" />
           <div className="absolute right-16 bottom-[-10px] w-24 h-24 rounded-full bg-white" />
         </div>
-        <div className="relative z-10 flex items-center gap-5">
-          <div className={clsx('w-16 h-16 rounded-2xl bg-white/20 backdrop-blur ring-4 ring-white/30 flex items-center justify-center text-2xl font-bold flex-shrink-0')}>
-            {user?.firstName?.[0]}{user?.lastName?.[0]}
-          </div>
-          <div>
-            <p className="text-white/70 text-sm">Profile</p>
-            <h2 className="text-2xl font-bold">{user?.firstName} {user?.lastName}</h2>
-            <p className="text-white/70 text-sm mt-0.5">{user?.email}</p>
+
+        <div className="relative z-10 p-6">
+          <div className="flex items-center gap-5">
+            {/* Avatar */}
+            <div className="w-20 h-20 rounded-2xl bg-white/25 backdrop-blur ring-4 ring-white/40 flex items-center justify-center text-2xl font-extrabold flex-shrink-0 shadow-lg">
+              {initials || <User size={28} />}
+            </div>
+            <div>
+              <p className="text-white/60 text-xs uppercase tracking-widest font-medium">{roleLabel}</p>
+              <h2 className="text-2xl font-bold mt-0.5">{fullName}</h2>
+              <p className="text-white/70 text-sm mt-0.5">{user?.email}</p>
+              {user?.studentOrEmployeeId && (
+                <p className="text-white/60 text-xs mt-1 font-mono">{user.studentOrEmployeeId}</p>
+              )}
+            </div>
           </div>
         </div>
       </div>
 
       {/* Info card */}
-      <div className="card space-y-1">
-        <h3 className="section-title mb-4">Account Information</h3>
-        {infoRows.map(({ icon: Icon, label, value, badge, mono }) => (
-          <div key={label} className="flex items-center gap-4 py-3 border-b border-slate-50 last:border-0">
-            <div className="w-9 h-9 rounded-xl bg-primary-50 flex items-center justify-center flex-shrink-0">
-              <Icon size={16} className="text-primary-600" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-xs text-slate-400 font-medium uppercase tracking-wide">{label}</p>
-              {badge ? (
-                <Badge variant={roleConfig.badge} className="mt-0.5">{value}</Badge>
-              ) : (
-                <p className={clsx('text-sm font-semibold text-slate-800 mt-0.5', mono && 'font-mono text-xs')}>{value}</p>
-              )}
-            </div>
+      <div className="card">
+        <div className="flex items-center justify-between mb-5">
+          <h3 className="section-title">Account Information</h3>
+          <div className={clsx('flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold', roleConfig.light, roleConfig.text)}>
+            <ShieldCheck size={12} />
+            {roleLabel}
           </div>
-        ))}
+        </div>
+        <div className="space-y-0.5">
+          {infoRows.map(({ icon: Icon, label, value, badge, mono }) => (
+            <div key={label} className="flex items-center gap-4 py-3.5 border-b border-slate-50 last:border-0">
+              <div className={clsx('w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0', roleConfig.light)}>
+                <Icon size={17} className={roleConfig.text} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs text-slate-400 font-medium uppercase tracking-wide">{label}</p>
+                {badge ? (
+                  <Badge variant={roleConfig.badge} className="mt-1">{value}</Badge>
+                ) : (
+                  <p className={clsx('text-sm font-semibold text-slate-800 mt-0.5', mono && 'font-mono text-xs tracking-wider break-all select-all bg-slate-50 px-2 py-0.5 rounded-lg w-fit')}>
+                    {value}
+                  </p>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
 
-      {/* Security card — hidden for ADMIN (managed by system administrators only) */}
+      {/* Security card — hidden for ADMIN */}
       {user?.role !== 'ADMIN' && (
         <div className="card">
           <h3 className="section-title mb-4">Security</h3>
-          <div className="flex items-center justify-between p-4 bg-slate-50 rounded-xl">
+
+          <div className="flex items-center justify-between p-4 bg-slate-50 rounded-xl hover:bg-slate-100 transition-colors">
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-amber-50 flex items-center justify-center">
-                <KeyRound size={16} className="text-amber-600" />
+              <div className="w-10 h-10 rounded-xl bg-amber-50 flex items-center justify-center">
+                <KeyRound size={17} className="text-amber-600" />
               </div>
               <div>
                 <p className="text-sm font-semibold text-slate-800">Password</p>
-                <p className="text-xs text-slate-400">Change your account password via email OTP</p>
+                <p className="text-xs text-slate-400 mt-0.5">Change your account password via email OTP</p>
               </div>
             </div>
             <button
               onClick={() => setChangePwOpen(true)}
               className="btn-secondary text-sm flex items-center gap-1.5"
             >
-              Change <ArrowRight size={14} />
+              <Edit3 size={14} /> Change
             </button>
           </div>
 

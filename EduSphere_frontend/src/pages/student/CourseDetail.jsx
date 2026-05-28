@@ -11,12 +11,12 @@ import { formatDateTime, isDeadlinePassed, scoreBg } from '../../utils/helpers'
 import { CONTENT_TYPE_LABELS, CONTENT_TYPE_COLORS } from '../../utils/constants'
 import {
   BookOpen, Video, FileText, CheckCircle2,
-  ClipboardList, Calendar, Clock, ArrowLeft, ExternalLink, Trophy,
+  ClipboardList, Calendar, Clock, ArrowLeft, ExternalLink, Trophy, ScrollText,
 } from 'lucide-react'
 import clsx from 'clsx'
 import toast from 'react-hot-toast'
 
-const TABS = ['Content', 'Assignments', 'Submissions', 'Info']
+const TABS = ['Content', 'Assignments', 'Submissions', 'Syllabus', 'Info']
 
 export default function CourseDetail() {
   const { courseId } = useParams()
@@ -53,6 +53,13 @@ export default function CourseDetail() {
     enabled: !!user?.userId && tab === 'Submissions',
   })
 
+  const { data: syllabusData } = useQuery({
+    queryKey: ['syllabus', courseId],
+    queryFn: () => courseService.getSyllabus(courseId),
+    enabled: tab === 'Syllabus',
+    retry: false,
+  })
+
   const completeMutation = useMutation({
     mutationFn: (contentId) => courseService.markContentComplete(courseId, contentId),
     onSuccess: () => {
@@ -66,7 +73,7 @@ export default function CourseDetail() {
 
   const course = courseData?.data?.data
   const contents = contentData?.data?.data || []
-  const progress = progressData?.data?.data?.progressPercentage ?? 0
+  const progress = Math.min(100, progressData?.data?.data?.progressPercentage ?? 0)
   const completedIds = new Set((progressData?.data?.data?.completedContentIds) || [])
   const assignments = assignmentsData?.data?.data || []
   const allSubmissions = myProgressData?.data?.data?.submissions || []
@@ -260,6 +267,31 @@ export default function CourseDetail() {
                 </div>
               )
             })
+          )}
+        </div>
+      )}
+
+      {/* Syllabus tab */}
+      {tab === 'Syllabus' && (
+        <div className="card">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-10 h-10 rounded-xl bg-primary-100 flex items-center justify-center flex-shrink-0">
+              <ScrollText size={18} className="text-primary-600" />
+            </div>
+            <div>
+              <p className="font-semibold text-slate-900">Course Syllabus</p>
+              <p className="text-xs text-slate-400">Uploaded by coordinator</p>
+            </div>
+          </div>
+          {syllabusData?.data?.data ? (
+            <button
+              onClick={() => courseService.openSyllabus(courseId)}
+              className="btn-primary flex items-center gap-2"
+            >
+              <ExternalLink size={15} /> View Syllabus PDF
+            </button>
+          ) : (
+            <p className="text-sm text-slate-400">No syllabus has been uploaded for this course yet.</p>
           )}
         </div>
       )}

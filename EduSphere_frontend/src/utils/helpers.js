@@ -49,3 +49,17 @@ export const scoreBg = (score) => {
   if (score >= 60) return 'bg-amber-100 text-amber-700'
   return 'bg-rose-100 text-rose-700'
 }
+
+export const getGreeting = () => {
+  const hour = new Date().getHours()
+  if (hour < 12) return 'Good Morning'
+  if (hour < 17) return 'Good Afternoon'
+  return 'Good Evening'
+}
+
+export const getGreetingEmoji = () => {
+  const hour = new Date().getHours()
+  if (hour < 12) return '☀️'
+  if (hour < 17) return '🌤️'
+  return '🌙'
+}

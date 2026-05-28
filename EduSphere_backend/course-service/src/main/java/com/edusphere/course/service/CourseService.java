@@ -10,7 +10,9 @@ import java.util.UUID;
 public interface CourseService {
     CourseResponse createCourse(CreateCourseRequest request, UUID adminId);
     List<CourseResponse> getAllCourses();
+    List<CourseResponse> getDeletedCourses();
     CourseResponse getCourseById(UUID courseId);
     CourseResponse updateCourse(UUID courseId, UpdateCourseRequest request, UUID adminId);
     void deleteCourse(UUID courseId, UUID adminId);
+    void restoreCourse(UUID courseId, UUID adminId);
 }

@@ -30,8 +30,8 @@ export default function CourseCard({ course, progress, navigateTo, index = 0 }) 
             <BookOpen size={18} />
           </div>
           <div>
-            <p className="font-semibold text-slate-900 text-sm leading-tight">{course.courseName}</p>
-            <p className="text-xs text-slate-400 mt-0.5">{course.courseCode}</p>
+            <p className="font-semibold text-sm leading-tight" style={{ color: 'var(--text-primary)' }}>{course.courseName}</p>
+            <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>{course.courseCode}</p>
           </div>
         </div>
         <ArrowRight size={16} className="text-slate-300 group-hover:text-primary-500 transition-colors flex-shrink-0 mt-1" />

@@ -1,12 +1,14 @@
 import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '../../context/AuthContext'
 import { courseService } from '../../services/courseService'
+import { enrollmentService } from '../../services/enrollmentService'
 import { analyticsService } from '../../services/analyticsService'
 import StatCard from '../../components/dashboard/StatCard'
 import { PageLoader } from '../../components/common/LoadingSpinner'
-import { BookOpen, Users, TrendingUp, FolderKanban, ArrowRight } from 'lucide-react'
+import { BookOpen, Users, TrendingUp, FolderKanban, ArrowRight, Clock, Bell } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import Badge from '../../components/common/Badge'
+import { getGreeting, getGreetingEmoji } from '../../utils/helpers'
 
 export default function CoordinatorDashboard() {
   const { user } = useAuth()
@@ -22,32 +24,71 @@ export default function CoordinatorDashboard() {
     queryFn: () => analyticsService.getKpis(),
   })
 
+  const { data: pendingData } = useQuery({
+    queryKey: ['pending-enrollments'],
+    queryFn: () => enrollmentService.getPendingRequests(),
+  })
+
   if (isLoading) return <PageLoader />
 
   const courses = coursesData?.data?.data || []
   const kpis    = kpiData?.data?.data    || {}
+  const pendingRequests = pendingData?.data?.data || []
 
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Welcome banner */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500 p-6 text-white">
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500 p-6 text-white shadow-glow">
         <div className="absolute right-0 top-0 w-64 h-full opacity-10">
           <div className="absolute right-[-30px] top-[-30px] w-48 h-48 rounded-full bg-white" />
           <div className="absolute right-24 bottom-[-20px] w-32 h-32 rounded-full bg-white" />
         </div>
-        <div className="relative z-10">
-          <p className="text-white/70 text-sm font-medium">Welcome,</p>
-          <h2 className="text-3xl font-bold mt-0.5">Coordinator {user?.firstName} {user?.lastName} 📋</h2>
-          <p className="text-white/70 text-sm mt-2">Manage course assignments, departments, and enrollments.</p>
+        <div className="relative z-10 flex items-start justify-between gap-4">
+          <div>
+            <p className="text-white/70 text-sm font-medium flex items-center gap-1.5">
+              {getGreetingEmoji()} {getGreeting()}
+            </p>
+            <h2 className="text-3xl font-bold mt-0.5">{user?.firstName} {user?.lastName}</h2>
+            <p className="text-white/70 text-sm mt-2">Manage course assignments, departments, and enrollments.</p>
+          </div>
+          <div className="w-14 h-14 rounded-2xl bg-white/20 backdrop-blur flex items-center justify-center flex-shrink-0">
+            <FolderKanban size={26} className="text-white" />
+          </div>
         </div>
       </div>
 
+      {/* Pending requests alert */}
+      {pendingRequests.length > 0 && (
+        <div
+          onClick={() => navigate('/coordinator/enrollments')}
+          className="flex items-center justify-between gap-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-2xl px-5 py-4 cursor-pointer hover:bg-amber-100 dark:hover:bg-amber-900/30 transition-colors"
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center flex-shrink-0">
+              <Bell size={18} className="text-amber-600" />
+            </div>
+            <div>
+              <p className="font-semibold text-sm" style={{ color: 'var(--text-primary)' }}>
+                {pendingRequests.length} Pending Enrollment Request{pendingRequests.length !== 1 ? 's' : ''}
+              </p>
+              <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>Students are waiting for your approval.</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <span className="px-2.5 py-1 rounded-lg bg-amber-500 text-white text-sm font-bold">
+              {pendingRequests.length}
+            </span>
+            <ArrowRight size={16} className="text-amber-600" />
+          </div>
+        </div>
+      )}
+
       {/* Stat cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-        <StatCard label="Total Courses"   value={courses.length}                    icon={BookOpen}     colorIndex={3} />
-        <StatCard label="Total Students"  value={kpis.totalStudents ?? '—'}         icon={Users}        colorIndex={0} />
-        <StatCard label="Managed Courses" value={courses.length}                    icon={FolderKanban} colorIndex={1} />
-        <StatCard label="Completion Rate" value={`${kpis.completionRate ?? 0}%`}    icon={TrendingUp}   colorIndex={2} />
+        <StatCard label="Total Courses"          value={courses.length}                 icon={BookOpen}     colorIndex={3} />
+        <StatCard label="Total Students"         value={kpis.totalStudents ?? '—'}      icon={Users}        colorIndex={0} />
+        <StatCard label="Pending Requests"       value={pendingRequests.length}         icon={Clock}        colorIndex={2} />
+        <StatCard label="Completion Rate"        value={`${kpis.completionRate ?? 0}%`} icon={TrendingUp}   colorIndex={1} />
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
@@ -64,13 +105,13 @@ export default function CoordinatorDashboard() {
           </div>
           <div className="space-y-3">
             {courses.slice(0, 6).map((c) => (
-              <div key={c.courseId} className="flex items-center gap-3 p-3 rounded-xl hover:bg-primary-50 transition-colors">
-                <div className="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center flex-shrink-0">
-                  <BookOpen size={14} className="text-amber-600" />
+              <div key={c.courseId} className="flex items-center gap-3 p-3 rounded-xl hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors">
+                <div className="w-8 h-8 rounded-lg bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center flex-shrink-0">
+                  <BookOpen size={14} className="text-amber-600 dark:text-amber-400" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-slate-800 truncate">{c.courseName}</p>
-                  <p className="text-xs text-slate-400">{c.courseCode}</p>
+                  <p className="text-sm font-semibold truncate" style={{ color: 'var(--text-primary)' }}>{c.courseName}</p>
+                  <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{c.courseCode}</p>
                 </div>
                 <Badge variant="purple">{c.courseCode}</Badge>
               </div>
@@ -83,46 +124,62 @@ export default function CoordinatorDashboard() {
 
         {/* Course summary */}
         <div className="card">
-          <h3 className="section-title mb-4">Course Overview</h3>
+          <h3 className="section-title mb-4">Quick Overview</h3>
           <div className="space-y-3">
-            <div className="flex items-center justify-between p-4 bg-primary-50 rounded-xl">
+            <div className="flex items-center justify-between p-4 bg-primary-50 dark:bg-primary-900/20 rounded-xl">
               <div className="flex items-center gap-3">
                 <div className="w-3 h-3 rounded-full bg-primary-500" />
-                <span className="text-sm font-medium text-slate-700">Total Courses</span>
+                <span className="text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>Total Courses</span>
               </div>
               <span className="text-xl font-bold text-primary-600">{courses.length}</span>
             </div>
-            <div className="flex items-center justify-between p-4 bg-amber-50 rounded-xl">
+            <div className="flex items-center justify-between p-4 bg-amber-50 dark:bg-amber-900/20 rounded-xl">
               <div className="flex items-center gap-3">
                 <div className="w-3 h-3 rounded-full bg-amber-400" />
-                <span className="text-sm font-medium text-slate-700">Completion Rate</span>
+                <span className="text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>Completion Rate</span>
               </div>
               <span className="text-xl font-bold text-amber-600">{kpis.completionRate ?? 0}%</span>
             </div>
-            <div className="flex items-center justify-between p-4 bg-emerald-50 rounded-xl">
+            <div className="flex items-center justify-between p-4 bg-rose-50 dark:bg-rose-900/20 rounded-xl">
+              <div className="flex items-center gap-3">
+                <div className="w-3 h-3 rounded-full bg-rose-400" />
+                <span className="text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>Pending Requests</span>
+              </div>
+              <span className="text-xl font-bold text-rose-600">{pendingRequests.length}</span>
+            </div>
+            <div className="flex items-center justify-between p-4 bg-emerald-50 dark:bg-emerald-900/20 rounded-xl">
               <div className="flex items-center gap-3">
                 <div className="w-3 h-3 rounded-full bg-emerald-500" />
-                <span className="text-sm font-medium text-slate-700">Total Students</span>
+                <span className="text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>Total Students</span>
               </div>
               <span className="text-xl font-bold text-emerald-600">{kpis.totalStudents ?? '—'}</span>
             </div>
           </div>
 
           {/* Quick actions */}
-          <div className="mt-5 pt-4 border-t border-slate-100 space-y-2">
-            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Quick Actions</p>
+          <div className="mt-5 pt-4 border-t space-y-2" style={{ borderColor: 'var(--border)' }}>
+            <p className="text-xs font-semibold uppercase tracking-wide mb-3" style={{ color: 'var(--text-muted)' }}>Quick Actions</p>
             <button
               onClick={() => navigate('/coordinator/enrollments')}
-              className="w-full flex items-center justify-between px-4 py-3 bg-slate-50 hover:bg-primary-50 rounded-xl transition-colors group"
+              className="w-full flex items-center justify-between px-4 py-3 rounded-xl transition-colors group hover:bg-amber-50 dark:hover:bg-amber-900/20"
+              style={{ backgroundColor: 'var(--bg-base)' }}
             >
-              <span className="text-sm font-medium text-slate-700">Manage Enrollments</span>
-              <ArrowRight size={15} className="text-slate-400 group-hover:text-primary-600 transition-colors" />
+              <span className="text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>
+                Review Pending Requests
+                {pendingRequests.length > 0 && (
+                  <span className="ml-2 px-1.5 py-0.5 rounded bg-amber-500 text-white text-xs font-bold">
+                    {pendingRequests.length}
+                  </span>
+                )}
+              </span>
+              <ArrowRight size={15} className="text-slate-400 group-hover:text-amber-600 transition-colors" />
             </button>
             <button
               onClick={() => navigate('/coordinator/courses')}
-              className="w-full flex items-center justify-between px-4 py-3 bg-slate-50 hover:bg-primary-50 rounded-xl transition-colors group"
+              className="w-full flex items-center justify-between px-4 py-3 rounded-xl transition-colors group hover:bg-primary-50 dark:hover:bg-primary-900/20"
+              style={{ backgroundColor: 'var(--bg-base)' }}
             >
-              <span className="text-sm font-medium text-slate-700">Upload Syllabi</span>
+              <span className="text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>Upload Syllabi</span>
               <ArrowRight size={15} className="text-slate-400 group-hover:text-primary-600 transition-colors" />
             </button>
           </div>

@@ -140,6 +140,55 @@ public class EnrollmentServiceImpl implements EnrollmentService {
 
     @Override
     @Transactional
+    public EnrollmentResponse requestEnrollment(UUID studentId, UUID courseId) {
+        if (enrollmentRepository.existsByUserIdAndCourseId(studentId, courseId)) {
+            throw new CustomException("You have already requested or are enrolled in this course", HttpStatus.CONFLICT);
+        }
+        Enrollment enrollment = Enrollment.builder()
+                .userId(studentId)
+                .courseId(courseId)
+                .userRole(UserRole.STUDENT)
+                .enrolledAt(LocalDateTime.now())
+                .isException(false)
+                .status(EnrollmentStatus.PENDING)
+                .build();
+        Enrollment saved = enrollmentRepository.save(enrollment);
+        return toResponse(saved);
+    }
+
+    @Override
+    public List<EnrollmentResponse> getPendingRequests() {
+        return enrollmentRepository.findByStatusAndIsDeletedFalse(EnrollmentStatus.PENDING)
+                .stream().map(this::toResponse).collect(Collectors.toList());
+    }
+
+    @Override
+    public List<EnrollmentResponse> getStudentPendingRequests(UUID studentId) {
+        return enrollmentRepository.findByUserIdAndStatusAndIsDeletedFalse(studentId, EnrollmentStatus.PENDING)
+                .stream().map(this::toResponse).collect(Collectors.toList());
+    }
+
+    @Override
+    @Transactional
+    public EnrollmentResponse approveEnrollment(UUID enrollmentId) {
+        Enrollment enrollment = enrollmentRepository.findById(enrollmentId)
+                .orElseThrow(() -> new CustomException("Enrollment request not found", HttpStatus.NOT_FOUND));
+        enrollment.setStatus(EnrollmentStatus.ACTIVE);
+        return toResponse(enrollmentRepository.save(enrollment));
+    }
+
+    @Override
+    @Transactional
+    public void rejectEnrollment(UUID enrollmentId) {
+        Enrollment enrollment = enrollmentRepository.findById(enrollmentId)
+                .orElseThrow(() -> new CustomException("Enrollment request not found", HttpStatus.NOT_FOUND));
+        enrollment.setStatus(EnrollmentStatus.REJECTED);
+        enrollment.setDeleted(true);
+        enrollmentRepository.save(enrollment);
+    }
+
+    @Override
+    @Transactional
     public EnrollmentResponse selfEnroll(UUID userId, String userRole, UUID courseId) {
         UserRole role;
         try {
@@ -185,7 +234,9 @@ public class EnrollmentServiceImpl implements EnrollmentService {
     @Override
     public List<EnrollmentResponse> getStudentEnrollments(UUID studentId) {
         return enrollmentRepository.findByUserIdAndUserRoleAndIsDeletedFalse(studentId, UserRole.STUDENT)
-                .stream().map(this::toResponse).collect(Collectors.toList());
+                .stream()
+                .filter(e -> e.getStatus() == EnrollmentStatus.ACTIVE)
+                .map(this::toResponse).collect(Collectors.toList());
     }
 
     @Override
@@ -196,12 +247,20 @@ public class EnrollmentServiceImpl implements EnrollmentService {
 
     @Override
     public boolean isEnrolled(UUID userId, UUID courseId) {
-        return enrollmentRepository.findByUserIdAndCourseIdAndIsDeletedFalse(userId, courseId).isPresent();
+        return enrollmentRepository.findByUserIdAndCourseIdAndIsDeletedFalse(userId, courseId)
+                .filter(e -> e.getStatus() == EnrollmentStatus.ACTIVE)
+                .isPresent();
     }
 
     @Override
     public long getTotalEnrollmentCount() {
         return enrollmentRepository.countByIsDeletedFalse();
+    }
+
+    @Override
+    public List<EnrollmentResponse> getDeletedEnrollments() {
+        return enrollmentRepository.findByIsDeletedTrue()
+                .stream().map(this::toResponse).collect(Collectors.toList());
     }
 
     private EnrollmentResponse toResponse(Enrollment enrollment) {

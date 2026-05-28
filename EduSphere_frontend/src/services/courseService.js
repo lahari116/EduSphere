@@ -2,6 +2,8 @@ import api from './api'
 
 export const courseService = {
   getAll: () => api.get('/courses'),
+  getDeleted: () => api.get('/courses/deleted'),
+  restore: (id) => api.post(`/courses/${id}/restore`),
   getById: (id) => api.get(`/courses/${id}`),
   create: (data) => api.post('/courses', data),
   update: (id, data) => api.patch(`/courses/${id}`, data),
@@ -12,7 +14,7 @@ export const courseService = {
   linkDepartment: (courseId, deptId) => api.post(`/courses/${courseId}/departments/${deptId}`),
   unlinkDepartment: (courseId, deptId) => api.delete(`/courses/${courseId}/departments/${deptId}`),
 
-  // Syllabus (coordinator)
+  // Syllabus (coordinator upload; student/instructor view)
   uploadSyllabus: (courseId, file) => {
     const fd = new FormData()
     fd.append('file', file)
@@ -21,6 +23,11 @@ export const courseService = {
     })
   },
   getSyllabus: (courseId) => api.get(`/courses/${courseId}/syllabus`, { silentError: true }),
+  openSyllabus: async (courseId) => {
+    const res = await api.get(`/courses/${courseId}/syllabus/file`, { responseType: 'blob' })
+    const blobUrl = URL.createObjectURL(res.data)
+    window.open(blobUrl, '_blank')
+  },
 
   // Course content (instructor)
   getContent: (courseId) => api.get(`/courses/${courseId}/content`),

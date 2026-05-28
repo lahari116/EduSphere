@@ -4,6 +4,7 @@ import com.edusphere.iam.enums.Role;
 import jakarta.persistence.*;
 import lombok.*;
 
+import java.time.LocalDate;
 import java.util.UUID;
 
 @Entity
@@ -52,4 +53,10 @@ public class User extends BaseEntity {
 
     @Column(name = "temp_password_change_required", nullable = false)
     private boolean tempPasswordChangeRequired = false;
+
+    @Column(name = "streak_days", nullable = false)
+    private int streakDays = 0;
+
+    @Column(name = "last_login_date")
+    private LocalDate lastLoginDate;
 }

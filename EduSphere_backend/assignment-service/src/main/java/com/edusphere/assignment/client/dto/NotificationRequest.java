@@ -13,8 +13,10 @@ import java.util.UUID;
 @AllArgsConstructor
 public class NotificationRequest {
     private UUID userId;
+    private String recipientEmail;
     private String title;
     private String message;
+    private String body;
     private String eventType;
     private String channel;
 }

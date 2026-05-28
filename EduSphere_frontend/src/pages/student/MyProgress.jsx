@@ -138,7 +138,7 @@ export default function MyProgress() {
           <div className="space-y-4">
             {enrollments.map((e, i) => {
               const course = courseMap[e.courseId]
-              const progressPct = progressQueries[i]?.data?.data?.data?.progressPercentage ?? 0
+              const progressPct = Math.min(100, progressQueries[i]?.data?.data?.data?.progressPercentage ?? 0)
               return (
                 <div key={e.enrollmentId}>
                   <div className="flex items-center justify-between mb-1">

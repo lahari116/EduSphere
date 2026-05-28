@@ -75,6 +75,12 @@ public class CourseServiceImpl implements CourseService {
     }
 
     @Override
+    public List<CourseResponse> getDeletedCourses() {
+        return courseRepository.findAllByDeletedTrue().stream()
+                .map(this::buildResponse).collect(Collectors.toList());
+    }
+
+    @Override
     public CourseResponse getCourseById(UUID courseId) {
         Course course = courseRepository.findById(courseId)
                 .orElseThrow(() -> new CustomException("Course not found", HttpStatus.NOT_FOUND));
@@ -116,6 +122,23 @@ public class CourseServiceImpl implements CourseService {
                     .resourceId(courseId.toString())
                     .serviceName("course-service").build());
         } catch (Exception e) { log.warn("Audit log failed for COURSE_DELETED: {}", e.getMessage()); }
+    }
+
+    @Override
+    @Transactional
+    public void restoreCourse(UUID courseId, UUID adminId) {
+        Course course = courseRepository.findById(courseId)
+                .orElseThrow(() -> new CustomException("Course not found", HttpStatus.NOT_FOUND));
+        course.setDeleted(false);
+        course.setActive(true);
+        courseRepository.save(course);
+        try {
+            auditServiceClient.createLog(AuditLogRequest.builder()
+                    .actorId(adminId).actorRole("ADMIN")
+                    .action("COURSE_RESTORED").resourceType("COURSE")
+                    .resourceId(courseId.toString())
+                    .serviceName("course-service").build());
+        } catch (Exception e) { log.warn("Audit log failed for COURSE_RESTORED: {}", e.getMessage()); }
     }
 
     private CourseResponse buildResponse(Course c) {

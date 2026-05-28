@@ -3,20 +3,24 @@ import Sidebar from './Sidebar'
 import Header from './Header'
 
 const TITLES = {
-  '/student/dashboard':    'Dashboard',
-  '/student/courses':      'My Courses',
-  '/student/enrollments':  'My Enrollments',
-  '/student/progress':     'My Progress',
-  '/instructor/dashboard': 'Dashboard',
+  '/student/dashboard':       'Dashboard',
+  '/student/courses':         'My Courses',
+  '/student/enrollments':     'My Enrollments',
+  '/student/progress':        'My Progress',
+  '/student/certifications':  'My Certifications',
+  '/instructor/dashboard':    'Dashboard',
+  '/instructor/courses':      'Courses',
   '/coordinator/dashboard':   'Dashboard',
   '/coordinator/courses':     'Course Management',
   '/coordinator/enrollments': 'Enrollment Management',
-  '/admin/dashboard': 'Dashboard',
-  '/admin/users':     'User Management',
-  '/admin/courses':   'Course Management',
-  '/admin/audit':     'Audit Logs',
-  '/notifications':   'Notifications',
-  '/profile':         'My Profile',
+  '/admin/dashboard':         'Dashboard',
+  '/admin/users':             'User Management',
+  '/admin/courses':           'Course Management',
+  '/admin/audit':             'Audit Logs',
+  '/student/certifications':  'My Certifications',
+  '/admin/departments':       'Departments',
+  '/notifications':           'Notifications',
+  '/profile':                 'My Profile',
 }
 
 export default function Layout() {
@@ -24,7 +28,7 @@ export default function Layout() {
   const title = TITLES[pathname] ?? 'EduSphere'
 
   return (
-    <div className="flex min-h-screen bg-primary-50">
+    <div className="flex min-h-screen" style={{ backgroundColor: 'var(--bg-base)' }}>
       <Sidebar />
       <div className="flex-1 flex flex-col min-w-0">
         <Header title={title} />

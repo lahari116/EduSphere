@@ -24,8 +24,6 @@
     <module>course-service</module>
     <module>enrollment-service</module>
     <module>assignment-service</module>
-    <module>exam-service</module>
-    <module>attendance-service</module>
     <module>notification-service</module>
     <module>analytics-service</module>
     <module>audit-service</module>
