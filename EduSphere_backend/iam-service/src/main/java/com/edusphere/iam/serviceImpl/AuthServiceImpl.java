@@ -85,6 +85,7 @@ public class AuthServiceImpl implements AuthService {
                 .firstName(user.getFirstName())
                 .lastName(user.getLastName())
                 .role(user.getRole())
+                .studentOrEmployeeId(user.getStudentOrEmployeeId())
                 .passwordChangeRequired(user.isTempPasswordChangeRequired())
                 .build();
     }

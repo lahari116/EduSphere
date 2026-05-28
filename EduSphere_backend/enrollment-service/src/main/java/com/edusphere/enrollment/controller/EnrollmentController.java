@@ -54,6 +54,40 @@ public class EnrollmentController {
                 .body(ApiResponse.success("Self-enrollment successful", response));
     }
 
+    @PostMapping("/request")
+    @PreAuthorize("hasRole('STUDENT')")
+    @Operation(summary = "Request enrollment into a course (Student)",
+            description = "Student sends an enrollment request that requires coordinator approval.")
+    public ResponseEntity<ApiResponse<EnrollmentResponse>> requestEnrollment(
+            @RequestHeader("X-User-Id") String userId,
+            @RequestParam UUID courseId) {
+        EnrollmentResponse response = enrollmentService.requestEnrollment(UUID.fromString(userId), courseId);
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.success("Enrollment request submitted", response));
+    }
+
+    @GetMapping("/pending")
+    @PreAuthorize("hasAnyRole('ADMIN', 'COORDINATOR')")
+    @Operation(summary = "Get all pending enrollment requests (Coordinator/Admin)")
+    public ResponseEntity<ApiResponse<List<EnrollmentResponse>>> getPendingRequests() {
+        return ResponseEntity.ok(ApiResponse.success("Pending requests retrieved", enrollmentService.getPendingRequests()));
+    }
+
+    @PostMapping("/{enrollmentId}/approve")
+    @PreAuthorize("hasAnyRole('ADMIN', 'COORDINATOR')")
+    @Operation(summary = "Approve an enrollment request (Coordinator/Admin)")
+    public ResponseEntity<ApiResponse<EnrollmentResponse>> approve(@PathVariable UUID enrollmentId) {
+        return ResponseEntity.ok(ApiResponse.success("Enrollment approved", enrollmentService.approveEnrollment(enrollmentId)));
+    }
+
+    @PostMapping("/{enrollmentId}/reject")
+    @PreAuthorize("hasAnyRole('ADMIN', 'COORDINATOR')")
+    @Operation(summary = "Reject an enrollment request (Coordinator/Admin)")
+    public ResponseEntity<ApiResponse<Void>> reject(@PathVariable UUID enrollmentId) {
+        enrollmentService.rejectEnrollment(enrollmentId);
+        return ResponseEntity.ok(ApiResponse.success("Enrollment rejected", null));
+    }
+
     @GetMapping
     @PreAuthorize("hasAnyRole('ADMIN', 'COORDINATOR', 'INSTRUCTOR')")
     @Operation(summary = "Get all enrollments for a course",

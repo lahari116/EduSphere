@@ -1,4 +1,4 @@
-﻿package com.edusphere.course.dto.request;
+package com.edusphere.course.dto.request;
 
 import jakarta.validation.constraints.NotBlank;
 import lombok.Data;

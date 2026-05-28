@@ -1,4 +1,4 @@
-﻿package com.edusphere.iam.client.dto;
+package com.edusphere.iam.client.dto;
 
 import lombok.Data;
 

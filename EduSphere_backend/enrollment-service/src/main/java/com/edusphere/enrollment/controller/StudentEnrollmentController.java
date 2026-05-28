@@ -23,12 +23,18 @@ public class StudentEnrollmentController {
     private final EnrollmentService enrollmentService;
 
     @GetMapping
-    @Operation(summary = "Get all course enrollments for a student",
-            description = "Returns all active enrollments for the given studentId. "
-                    + "Students can view their own enrollments; Admins and Coordinators can view any student's.")
+    @Operation(summary = "Get all active course enrollments for a student")
     public ResponseEntity<ApiResponse<List<EnrollmentResponse>>> getStudentEnrollments(
             @PathVariable UUID studentId) {
         List<EnrollmentResponse> enrollments = enrollmentService.getStudentEnrollments(studentId);
         return ResponseEntity.ok(ApiResponse.success("Student enrollments retrieved successfully", enrollments));
+    }
+
+    @GetMapping("/pending")
+    @Operation(summary = "Get pending enrollment requests for a student")
+    public ResponseEntity<ApiResponse<List<EnrollmentResponse>>> getStudentPendingRequests(
+            @PathVariable UUID studentId) {
+        List<EnrollmentResponse> requests = enrollmentService.getStudentPendingRequests(studentId);
+        return ResponseEntity.ok(ApiResponse.success("Pending requests retrieved", requests));
     }
 }

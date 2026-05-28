@@ -63,6 +63,23 @@ public class CourseController {
         return ResponseEntity.ok(ApiResponse.success(courseService.getAllCourses()));
     }
 
+    @GetMapping("/deleted")
+    @PreAuthorize("hasRole('ADMIN')")
+    @Operation(summary = "List deleted courses (Admin)")
+    public ResponseEntity<ApiResponse<List<CourseResponse>>> getDeleted() {
+        return ResponseEntity.ok(ApiResponse.success(courseService.getDeletedCourses()));
+    }
+
+    @PostMapping("/{courseId}/restore")
+    @PreAuthorize("hasRole('ADMIN')")
+    @Operation(summary = "Restore a deleted course (Admin)")
+    public ResponseEntity<ApiResponse<Void>> restore(
+            @PathVariable UUID courseId,
+            @RequestHeader("X-User-Id") String adminId) {
+        courseService.restoreCourse(courseId, UUID.fromString(adminId));
+        return ResponseEntity.ok(ApiResponse.success("Course restored", null));
+    }
+
     @GetMapping("/{courseId}")
     @Operation(summary = "Get course by ID")
     public ResponseEntity<ApiResponse<CourseResponse>> getById(@PathVariable UUID courseId) {
@@ -132,9 +149,25 @@ public class CourseController {
     }
 
     @GetMapping("/{courseId}/syllabus")
-    @Operation(summary = "Get syllabus for course")
+    @Operation(summary = "Get syllabus metadata for course")
     public ResponseEntity<ApiResponse<SyllabusResponse>> getSyllabus(@PathVariable UUID courseId) {
         return ResponseEntity.ok(ApiResponse.success(syllabusService.getSyllabus(courseId)));
+    }
+
+    @GetMapping("/{courseId}/syllabus/file")
+    @PreAuthorize("hasAnyRole('STUDENT', 'INSTRUCTOR', 'ADMIN', 'COORDINATOR')")
+    @Operation(summary = "Download syllabus PDF for course")
+    public ResponseEntity<byte[]> serveSyllabusFile(@PathVariable UUID courseId) throws IOException {
+        SyllabusResponse syllabus = syllabusService.getSyllabus(courseId);
+        Path filePath = Paths.get(syllabus.getFilePath());
+        if (!Files.exists(filePath)) {
+            throw new CustomException("Syllabus file not found on server", HttpStatus.NOT_FOUND);
+        }
+        byte[] bytes = Files.readAllBytes(filePath);
+        return ResponseEntity.ok()
+                .contentType(MediaType.APPLICATION_PDF)
+                .header("Content-Disposition", "inline; filename=\"" + filePath.getFileName() + "\"")
+                .body(bytes);
     }
 
     // ── Course Content ─────────────────────────────────────────────────────────
