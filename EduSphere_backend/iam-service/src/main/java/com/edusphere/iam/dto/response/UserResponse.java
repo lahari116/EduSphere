@@ -21,5 +21,4 @@ public class UserResponse {
     private UUID departmentId;
     private String studentOrEmployeeId;
     private boolean active;
-    private boolean deleted;
 }

@@ -242,11 +242,11 @@ public class AdminServiceImpl implements AdminService {
     @Override
     public List<UserResponse> getAllUsers() {
         return userRepository.findAll().stream()
+                .filter(u -> !u.isDeleted())
                 .map(u -> UserResponse.builder()
                         .userId(u.getUserId()).firstName(u.getFirstName()).lastName(u.getLastName())
                         .email(u.getEmail()).role(u.getRole()).departmentId(u.getDepartmentId())
                         .studentOrEmployeeId(u.getStudentOrEmployeeId()).active(u.isActive())
-                        .deleted(u.isDeleted())
                         .build())
                 .collect(Collectors.toList());
     }

@@ -132,25 +132,9 @@ public class CourseController {
     }
 
     @GetMapping("/{courseId}/syllabus")
-    @Operation(summary = "Get syllabus metadata for course")
+    @Operation(summary = "Get syllabus for course")
     public ResponseEntity<ApiResponse<SyllabusResponse>> getSyllabus(@PathVariable UUID courseId) {
         return ResponseEntity.ok(ApiResponse.success(syllabusService.getSyllabus(courseId)));
-    }
-
-    @GetMapping("/{courseId}/syllabus/file")
-    @PreAuthorize("hasAnyRole('STUDENT', 'INSTRUCTOR', 'ADMIN', 'COORDINATOR')")
-    @Operation(summary = "Download syllabus PDF for course")
-    public ResponseEntity<byte[]> serveSyllabusFile(@PathVariable UUID courseId) throws IOException {
-        SyllabusResponse syllabus = syllabusService.getSyllabus(courseId);
-        Path filePath = Paths.get(syllabus.getFilePath());
-        if (!Files.exists(filePath)) {
-            throw new CustomException("Syllabus file not found on server", HttpStatus.NOT_FOUND);
-        }
-        byte[] bytes = Files.readAllBytes(filePath);
-        return ResponseEntity.ok()
-                .contentType(MediaType.APPLICATION_PDF)
-                .header("Content-Disposition", "inline; filename=\"" + filePath.getFileName() + "\"")
-                .body(bytes);
     }
 
     // ── Course Content ─────────────────────────────────────────────────────────

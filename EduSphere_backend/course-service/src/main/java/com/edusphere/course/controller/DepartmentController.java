@@ -27,8 +27,8 @@ public class DepartmentController {
     private final DepartmentService departmentService;
 
     @PostMapping
-    @PreAuthorize("hasAnyRole('ADMIN', 'SERVICE')")
-    @Operation(summary = "Create department (Admin or internal service only)")
+    @PreAuthorize("hasAnyRole('ADMIN', 'COORDINATOR', 'SERVICE')")
+    @Operation(summary = "Create department (Admin, Coordinator, or internal service)")
     public ResponseEntity<ApiResponse<DepartmentResponse>> create(@Valid @RequestBody CreateDepartmentRequest req) {
         return ResponseEntity.ok(ApiResponse.success("Department created", departmentService.createDepartment(req)));
     }
