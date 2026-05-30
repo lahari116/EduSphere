@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useCallback } from 'react'
+import { createContext, useContext, useState, useCallback } from 'react'
 import { authService } from '../services/authService'
 import toast from 'react-hot-toast'
 
@@ -22,7 +22,10 @@ export function AuthProvider({ children }) {
         firstName: payload.firstName,
         lastName: payload.lastName,
         role: payload.role,
+        studentOrEmployeeId: payload.studentOrEmployeeId,
         passwordChangeRequired: payload.passwordChangeRequired,
+        streakDays: payload.streakDays ?? 1,
+        loginTime: new Date().toISOString(),
       }
       localStorage.setItem('user', JSON.stringify(userData))
       setUser(userData)

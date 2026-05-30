@@ -15,8 +15,10 @@ import CourseDetail from './pages/student/CourseDetail'
 import AssignmentAttempt from './pages/student/AssignmentAttempt'
 import MyProgress from './pages/student/MyProgress'
 import MyEnrollments from './pages/student/MyEnrollments'
+import MyCertifications from './pages/student/MyCertifications'
 
 import InstructorDashboard from './pages/instructor/InstructorDashboard'
+import InstructorCourses from './pages/instructor/InstructorCourses'
 import ManageCourse from './pages/instructor/ManageCourse'
 import CreateAssignment from './pages/instructor/CreateAssignment'
 import Submissions from './pages/instructor/Submissions'
@@ -78,9 +80,11 @@ export default function App() {
             <Route path="/student/assignments/:assignmentId" element={<ProtectedRoute role="STUDENT"><AssignmentAttempt /></ProtectedRoute>} />
             <Route path="/student/progress"               element={<ProtectedRoute role="STUDENT"><MyProgress /></ProtectedRoute>} />
             <Route path="/student/enrollments"            element={<ProtectedRoute role="STUDENT"><MyEnrollments /></ProtectedRoute>} />
+            <Route path="/student/certifications"         element={<ProtectedRoute role="STUDENT"><MyCertifications /></ProtectedRoute>} />
 
             {/* Instructor */}
             <Route path="/instructor/dashboard"                          element={<ProtectedRoute role="INSTRUCTOR"><InstructorDashboard /></ProtectedRoute>} />
+            <Route path="/instructor/courses"                            element={<ProtectedRoute role="INSTRUCTOR"><InstructorCourses /></ProtectedRoute>} />
             <Route path="/instructor/courses/:courseId"                  element={<ProtectedRoute role="INSTRUCTOR"><ManageCourse /></ProtectedRoute>} />
             <Route path="/instructor/courses/:courseId/assignments/new"  element={<ProtectedRoute role="INSTRUCTOR"><CreateAssignment /></ProtectedRoute>} />
             <Route path="/instructor/assignments/:assignmentId/submissions" element={<ProtectedRoute role="INSTRUCTOR"><Submissions /></ProtectedRoute>} />

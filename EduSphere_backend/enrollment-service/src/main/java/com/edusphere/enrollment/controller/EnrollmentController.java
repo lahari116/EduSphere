@@ -54,10 +54,44 @@ public class EnrollmentController {
                 .body(ApiResponse.success("Self-enrollment successful", response));
     }
 
+    @PostMapping("/request")
+    @PreAuthorize("hasRole('STUDENT')")
+    @Operation(summary = "Request enrollment into a course (Student)",
+            description = "Student sends an enrollment request that requires coordinator approval.")
+    public ResponseEntity<ApiResponse<EnrollmentResponse>> requestEnrollment(
+            @RequestHeader("X-User-Id") String userId,
+            @RequestParam UUID courseId) {
+        EnrollmentResponse response = enrollmentService.requestEnrollment(UUID.fromString(userId), courseId);
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.success("Enrollment request submitted", response));
+    }
+
+    @GetMapping("/pending")
+    @PreAuthorize("hasAnyRole('ADMIN', 'COORDINATOR')")
+    @Operation(summary = "Get all pending enrollment requests (Coordinator/Admin)")
+    public ResponseEntity<ApiResponse<List<EnrollmentResponse>>> getPendingRequests() {
+        return ResponseEntity.ok(ApiResponse.success("Pending requests retrieved", enrollmentService.getPendingRequests()));
+    }
+
+    @PostMapping("/{enrollmentId}/approve")
+    @PreAuthorize("hasAnyRole('ADMIN', 'COORDINATOR')")
+    @Operation(summary = "Approve an enrollment request (Coordinator/Admin)")
+    public ResponseEntity<ApiResponse<EnrollmentResponse>> approve(@PathVariable UUID enrollmentId) {
+        return ResponseEntity.ok(ApiResponse.success("Enrollment approved", enrollmentService.approveEnrollment(enrollmentId)));
+    }
+
+    @PostMapping("/{enrollmentId}/reject")
+    @PreAuthorize("hasAnyRole('ADMIN', 'COORDINATOR')")
+    @Operation(summary = "Reject an enrollment request (Coordinator/Admin)")
+    public ResponseEntity<ApiResponse<Void>> reject(@PathVariable UUID enrollmentId) {
+        enrollmentService.rejectEnrollment(enrollmentId);
+        return ResponseEntity.ok(ApiResponse.success("Enrollment rejected", null));
+    }
+
     @GetMapping
-    @PreAuthorize("hasAnyRole('ADMIN', 'COORDINATOR', 'INSTRUCTOR')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'COORDINATOR', 'INSTRUCTOR', 'SERVICE')")
     @Operation(summary = "Get all enrollments for a course",
-            description = "Admin, Coordinator, and Instructor can view enrollment records for a given courseId.")
+            description = "Admin, Coordinator, Instructor and internal services can view enrollment records for a given courseId.")
     public ResponseEntity<ApiResponse<List<EnrollmentResponse>>> getEnrollmentsByCourse(
             @RequestParam UUID courseId) {
         List<EnrollmentResponse> enrollments = enrollmentService.getEnrollmentsByCourse(courseId);
@@ -89,5 +123,14 @@ public class EnrollmentController {
     public ResponseEntity<ApiResponse<Long>> getTotalEnrollmentCount() {
         long count = enrollmentService.getTotalEnrollmentCount();
         return ResponseEntity.ok(ApiResponse.success("Total enrollment count retrieved", count));
+    }
+
+    @GetMapping("/past")
+    @PreAuthorize("hasAnyRole('ADMIN', 'COORDINATOR')")
+    @Operation(summary = "Get all past (deleted/dropped) enrollments (Admin/Coordinator)",
+            description = "Returns all soft-deleted enrollment records so admin or coordinator can view enrollment history.")
+    public ResponseEntity<ApiResponse<List<EnrollmentResponse>>> getPastEnrollments() {
+        List<EnrollmentResponse> enrollments = enrollmentService.getDeletedEnrollments();
+        return ResponseEntity.ok(ApiResponse.success("Past enrollments retrieved successfully", enrollments));
     }
 }

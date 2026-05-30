@@ -4,9 +4,12 @@ import com.edusphere.assignment.client.AnalyticsServiceClient;
 import com.edusphere.assignment.client.AuditServiceClient;
 import com.edusphere.assignment.client.EnrollmentServiceClient;
 import com.edusphere.assignment.client.IamServiceClient;
+import com.edusphere.assignment.client.NotificationServiceClient;
 import com.edusphere.assignment.client.dto.AuditLogRequest;
 import com.edusphere.assignment.client.dto.ClientApiResponse;
 import com.edusphere.assignment.client.dto.EnrollmentCheckDto;
+import com.edusphere.assignment.client.dto.EnrollmentDto;
+import com.edusphere.assignment.client.dto.NotificationRequest;
 import com.edusphere.assignment.client.dto.ProgressUpdateRequest;
 import com.edusphere.assignment.client.dto.UserDto;
 import com.edusphere.assignment.dto.request.AnswerRequest;
@@ -46,6 +49,7 @@ public class SubmissionServiceImpl implements SubmissionService {
     private final IamServiceClient iamServiceClient;
     private final AnalyticsServiceClient analyticsServiceClient;
     private final AuditServiceClient auditServiceClient;
+    private final NotificationServiceClient notificationServiceClient;
 
     @Override
     @Transactional
@@ -179,7 +183,42 @@ public class SubmissionServiceImpl implements SubmissionService {
             log.warn("Failed to create audit log for ASSIGNMENT_SUBMITTED: {}", e.getMessage());
         }
 
-        // Step 11: Build response (correctOption shown after submission)
+        // Step 11: Notify instructor if student scored less than 40%
+        if (score < 40.0) {
+            try {
+                ClientApiResponse<List<EnrollmentDto>> enrollResp =
+                        enrollmentServiceClient.getEnrollmentsByCourse(assignment.getCourseId());
+                if (enrollResp != null && enrollResp.getData() != null) {
+                    enrollResp.getData().stream()
+                            .filter(e -> "INSTRUCTOR".equalsIgnoreCase(e.getUserRole()))
+                            .findFirst()
+                            .ifPresent(instructor -> {
+                                String studentName = "A student";
+                                try {
+                                    ClientApiResponse<UserDto> studentResp = iamServiceClient.getUser(studentId);
+                                    if (studentResp != null && studentResp.getData() != null) {
+                                        UserDto s = studentResp.getData();
+                                        studentName = s.getFirstName() + " " + s.getLastName();
+                                    }
+                                } catch (Exception ignored) {}
+
+                                notificationServiceClient.dispatch(NotificationRequest.builder()
+                                        .userId(instructor.getUserId())
+                                        .eventType("LOW_SCORE_ALERT")
+                                        .title("Low Score Alert: " + assignment.getTitle())
+                                        .body(studentName + " scored " + Math.round(score)
+                                                + "% on \"" + assignment.getTitle()
+                                                + "\" — below the 40% threshold. Consider reviewing with the student.")
+                                        .channel("BOTH")
+                                        .build());
+                            });
+                }
+            } catch (Exception e) {
+                log.warn("Failed to send low-score instructor notification: {}", e.getMessage());
+            }
+        }
+
+        // Step 12: Build response (correctOption shown after submission)
         List<AnswerDetailResponse> answerDetailResponses = savedAnswers.stream()
                 .map(sa -> {
                     Question q = questionMap.get(sa.getQuestionId());

@@ -12,6 +12,16 @@ public interface EnrollmentService {
 
     EnrollmentResponse selfEnroll(UUID userId, String userRole, UUID courseId);
 
+    EnrollmentResponse requestEnrollment(UUID studentId, UUID courseId);
+
+    List<EnrollmentResponse> getPendingRequests();
+
+    List<EnrollmentResponse> getStudentPendingRequests(UUID studentId);
+
+    EnrollmentResponse approveEnrollment(UUID enrollmentId);
+
+    void rejectEnrollment(UUID enrollmentId);
+
     List<EnrollmentResponse> getEnrollmentsByUser(UUID userId);
 
     List<EnrollmentResponse> getEnrollmentsByCourse(UUID courseId);
@@ -25,4 +35,6 @@ public interface EnrollmentService {
     boolean isEnrolled(UUID userId, UUID courseId);
 
     long getTotalEnrollmentCount();
+
+    List<EnrollmentResponse> getDeletedEnrollments();
 }

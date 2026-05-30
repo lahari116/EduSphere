@@ -1,19 +1,24 @@
 import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { departmentService } from '../../services/departmentService'
 import { adminService } from '../../services/adminService'
 import { PageLoader } from '../../components/common/LoadingSpinner'
 import Badge from '../../components/common/Badge'
-import { Building2, ChevronDown, ChevronRight, Users, Search } from 'lucide-react'
+import Modal from '../../components/common/Modal'
+import { Building2, ChevronDown, ChevronRight, Users, Search, Plus } from 'lucide-react'
 import { getInitials } from '../../utils/helpers'
+import toast from 'react-hot-toast'
 import clsx from 'clsx'
 
 const ROLE_BADGE = { STUDENT: 'blue', INSTRUCTOR: 'green', COORDINATOR: 'amber', ADMIN: 'rose' }
 const ROLE_GRADIENT = { STUDENT: 'from-blue-400 to-indigo-500', INSTRUCTOR: 'from-emerald-400 to-teal-500', COORDINATOR: 'from-amber-400 to-orange-500', ADMIN: 'from-rose-400 to-pink-500' }
 
 export default function DepartmentManagement() {
+  const qc = useQueryClient()
   const [search, setSearch] = useState('')
   const [expanded, setExpanded] = useState({})
+  const [createModal, setCreateModal] = useState(false)
+  const [newDept, setNewDept] = useState({ departmentName: '', departmentCode: '', description: '' })
 
   const { data: deptData, isLoading: deptsLoading } = useQuery({
     queryKey: ['departments'],
@@ -23,6 +28,17 @@ export default function DepartmentManagement() {
   const { data: userData, isLoading: usersLoading } = useQuery({
     queryKey: ['admin-users'],
     queryFn: () => adminService.getUsers(),
+  })
+
+  const createDeptMutation = useMutation({
+    mutationFn: (data) => departmentService.create(data),
+    onSuccess: () => {
+      toast.success('Department created!')
+      setCreateModal(false)
+      setNewDept({ departmentName: '', departmentCode: '', description: '' })
+      qc.invalidateQueries({ queryKey: ['departments'] })
+    },
+    onError: (err) => toast.error(err?.response?.data?.message || 'Failed to create department'),
   })
 
   if (deptsLoading || usersLoading) return <PageLoader />
@@ -52,6 +68,9 @@ export default function DepartmentManagement() {
             {departments.length} department{departments.length !== 1 ? 's' : ''} · {allUsers.length} total users
           </p>
         </div>
+        <button onClick={() => setCreateModal(true)} className="btn-primary flex items-center gap-1.5 whitespace-nowrap">
+          <Plus size={15} /> New Department
+        </button>
       </div>
 
       {/* Search */}
@@ -95,6 +114,50 @@ export default function DepartmentManagement() {
           )}
         </div>
       )}
+
+      {/* Create department modal */}
+      <Modal open={createModal} onClose={() => setCreateModal(false)} title="Create New Department">
+        <div className="space-y-4">
+          <div>
+            <label className="label">Department Name</label>
+            <input
+              value={newDept.departmentName}
+              onChange={(e) => setNewDept((p) => ({ ...p, departmentName: e.target.value }))}
+              placeholder="e.g. Computer Science"
+              className="input"
+            />
+          </div>
+          <div>
+            <label className="label">Department Code</label>
+            <input
+              value={newDept.departmentCode}
+              onChange={(e) => setNewDept((p) => ({ ...p, departmentCode: e.target.value.toUpperCase() }))}
+              placeholder="e.g. CS"
+              className="input"
+            />
+          </div>
+          <div>
+            <label className="label">Description <span className="text-slate-400 font-normal">(optional)</span></label>
+            <textarea
+              value={newDept.description}
+              onChange={(e) => setNewDept((p) => ({ ...p, description: e.target.value }))}
+              placeholder="Brief description…"
+              rows={3}
+              className="input resize-none"
+            />
+          </div>
+          <div className="flex gap-3">
+            <button onClick={() => setCreateModal(false)} className="btn-secondary flex-1">Cancel</button>
+            <button
+              onClick={() => createDeptMutation.mutate(newDept)}
+              disabled={!newDept.departmentName || !newDept.departmentCode || createDeptMutation.isPending}
+              className="btn-primary flex-1"
+            >
+              {createDeptMutation.isPending ? 'Creating…' : 'Create'}
+            </button>
+          </div>
+        </div>
+      </Modal>
 
       {/* Department list */}
       <div className="space-y-3">

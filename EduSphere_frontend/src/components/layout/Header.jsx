@@ -1,73 +1,72 @@
 import { useNavigate } from 'react-router-dom'
-import { Bell, Search } from 'lucide-react'
+import { Bell, Sun, Moon, Flame } from 'lucide-react'
 import { useNotifications } from '../../context/NotificationContext'
+import { useTheme } from '../../context/ThemeContext'
 import { useAuth } from '../../context/AuthContext'
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
+import { getGreeting } from '../../utils/helpers'
 import clsx from 'clsx'
-
-const ROLE_PLACEHOLDER = {
-  STUDENT:     'Search courses, assignments…',
-  INSTRUCTOR:  'Search courses, students…',
-  COORDINATOR: 'Search courses, enrollments…',
-  ADMIN:       'Search users, courses, logs…',
-}
-
-const ROLE_SEARCH_PATH = {
-  STUDENT:     '/student/courses',
-  INSTRUCTOR:  '/instructor/dashboard',
-  COORDINATOR: '/coordinator/courses',
-  ADMIN:       '/admin/users',
-}
 
 export default function Header({ title }) {
   const navigate = useNavigate()
-  const { user } = useAuth()
   const notif = useNotifications()
-  const [search, setSearch] = useState('')
+  const { isDark, toggle } = useTheme()
+  const { user } = useAuth()
 
   useEffect(() => { notif?.fetchCount() }, [])
 
-  const placeholder = ROLE_PLACEHOLDER[user?.role] || 'Search…'
-
-  const handleKeyDown = (e) => {
-    if (e.key === 'Enter' && search.trim()) {
-      const path = ROLE_SEARCH_PATH[user?.role] || '/'
-      navigate(`${path}?q=${encodeURIComponent(search.trim())}`)
-      setSearch('')
-    }
-  }
+  const greeting = getGreeting()
+  const streak = user?.streakDays ?? 0
 
   return (
-    <header className="sticky top-0 z-20 bg-white/80 backdrop-blur border-b border-slate-100 px-6 py-3 flex items-center justify-between gap-4">
-      <h1 className="text-lg font-semibold text-slate-800 hidden sm:block">{title}</h1>
-
-      <div className="flex-1 max-w-xs">
-        <div className="relative">
-          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder={placeholder}
-            className="w-full pl-8 pr-3 py-2 text-sm rounded-xl bg-slate-50 border border-slate-200 focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-400 transition-all"
-          />
-        </div>
+    <header
+      className="sticky top-0 z-20 border-b px-6 py-3 flex items-center justify-between gap-4 backdrop-blur"
+      style={{ backgroundColor: 'color-mix(in srgb, var(--bg-sidebar) 85%, transparent)', borderColor: 'var(--border)' }}
+    >
+      <div className="flex flex-col">
+        <h1 className="text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>{title}</h1>
+        <p className="text-xs hidden sm:block" style={{ color: 'var(--text-muted)' }}>
+          {greeting}, {user?.firstName}!
+        </p>
       </div>
 
-      <button
-        onClick={() => navigate('/notifications')}
-        className="relative p-2 rounded-xl hover:bg-primary-50 transition-colors"
-      >
-        <Bell size={20} className="text-slate-600" />
-        {notif?.unreadCount > 0 && (
-          <span className={clsx(
-            'absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 rounded-full text-white text-[10px] font-bold flex items-center justify-center',
-            'bg-rose-500'
-          )}>
-            {notif.unreadCount > 99 ? '99+' : notif.unreadCount}
-          </span>
+      <div className="flex items-center gap-2">
+        {/* Streak badge */}
+        {streak > 0 && (
+          <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-50 dark:bg-amber-900/30 border border-amber-100 dark:border-amber-800">
+            <Flame size={14} className="text-amber-500" />
+            <span className="text-xs font-semibold text-amber-700 dark:text-amber-300">{streak} day streak</span>
+          </div>
         )}
-      </button>
+
+        {/* Theme toggle */}
+        <button
+          onClick={toggle}
+          className="p-2 rounded-xl transition-colors hover:bg-primary-50 dark:hover:bg-primary-900/30"
+          title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+        >
+          {isDark
+            ? <Sun size={18} className="text-amber-400" />
+            : <Moon size={18} className="text-slate-500" />
+          }
+        </button>
+
+        {/* Notifications */}
+        <button
+          onClick={() => navigate('/notifications')}
+          className="relative p-2 rounded-xl hover:bg-primary-50 dark:hover:bg-primary-900/30 transition-colors"
+        >
+          <Bell size={18} style={{ color: 'var(--text-secondary)' }} />
+          {notif?.unreadCount > 0 && (
+            <span className={clsx(
+              'absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 rounded-full text-white text-[10px] font-bold flex items-center justify-center',
+              'bg-rose-500 animate-pulse-soft'
+            )}>
+              {notif.unreadCount > 99 ? '99+' : notif.unreadCount}
+            </span>
+          )}
+        </button>
+      </div>
     </header>
   )
 }

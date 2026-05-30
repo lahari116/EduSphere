@@ -1,6 +1,7 @@
 package com.edusphere.enrollment.repository;
 
 import com.edusphere.enrollment.entity.Enrollment;
+import com.edusphere.enrollment.enums.EnrollmentStatus;
 import com.edusphere.enrollment.enums.UserRole;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
@@ -25,4 +26,12 @@ public interface EnrollmentRepository extends JpaRepository<Enrollment, UUID> {
     List<Enrollment> findByCourseIdAndUserRoleAndIsDeletedFalse(UUID courseId, UserRole userRole);
 
     long countByIsDeletedFalse();
+
+    List<Enrollment> findByStatusAndIsDeletedFalse(EnrollmentStatus status);
+
+    List<Enrollment> findByUserIdAndStatusAndIsDeletedFalse(UUID userId, EnrollmentStatus status);
+
+    List<Enrollment> findByIsDeletedTrue();
+
+    List<Enrollment> findByCourseIdAndIsDeletedTrue(UUID courseId);
 }

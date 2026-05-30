@@ -123,7 +123,7 @@ public class ContentCompletionServiceImpl implements ContentCompletionService {
         List<ContentCompletion> completions = completionRepository.findByStudentIdAndCourseId(studentId, courseId);
         long completedCount = completions.size();
 
-        double progressPct = totalContents > 0 ? (completedCount * 100.0 / totalContents) : 0.0;
+        double progressPct = totalContents > 0 ? Math.min(100.0, completedCount * 100.0 / totalContents) : 0.0;
 
         List<UUID> completedIds = completions.stream()
                 .map(ContentCompletion::getContentId)

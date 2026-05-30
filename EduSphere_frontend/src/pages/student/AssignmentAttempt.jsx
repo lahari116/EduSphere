@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { useQuery, useMutation } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { assignmentService } from '../../services/assignmentService'
 import { PageLoader } from '../../components/common/LoadingSpinner'
-import { Clock, AlertTriangle, CheckCircle, ArrowLeft, ArrowRight, Send } from 'lucide-react'
+import { Clock, CheckCircle, ArrowLeft, ArrowRight, Send, Trophy } from 'lucide-react'
 import { formatSeconds, scoreBg } from '../../utils/helpers'
 import clsx from 'clsx'
 import toast from 'react-hot-toast'
@@ -19,6 +19,7 @@ const getOptions = (q) => [
 export default function AssignmentAttempt() {
   const { assignmentId } = useParams()
   const navigate = useNavigate()
+  const qc = useQueryClient()
   const [current, setCurrent] = useState(0)
   const [answers, setAnswers] = useState({})   // { questionId: "A"|"B"|"C"|"D" }
   const [timeLeft, setTimeLeft] = useState(null)
@@ -36,9 +37,17 @@ export default function AssignmentAttempt() {
     mutationFn: (payload) => assignmentService.submit(assignmentId, payload),
     onSuccess: (res) => {
       clearInterval(timerRef.current)
-      setResult(res.data?.data)
+      const resultData = res.data?.data
+      setResult(resultData)
       setSubmitted(true)
-      toast.success('Assignment submitted!')
+      toast.success('Quiz submitted! Good job!')
+      // Invalidate course progress so it refreshes
+      const courseId = assignment?.courseId
+      if (courseId) {
+        qc.invalidateQueries({ queryKey: ['course-progress', courseId] })
+        qc.invalidateQueries({ queryKey: ['student-course-progress-all'] })
+      }
+      qc.invalidateQueries({ queryKey: ['student-assignment-progress'] })
     },
     onError: () => toast.error('Failed to submit'),
   })
@@ -83,19 +92,22 @@ export default function AssignmentAttempt() {
   if (!assignment) return <div className="card text-center py-12 text-slate-400">Assignment not found</div>
 
   if (submitted && result) {
+    const score = Math.round(result.score ?? 0)
+    const performance = score >= 80 ? 'Excellent' : score >= 60 ? 'Good' : 'Needs Improvement'
     return (
       <div className="max-w-lg mx-auto space-y-6 animate-slide-up">
         <div className="card text-center space-y-5">
           <div className="w-20 h-20 mx-auto bg-emerald-100 rounded-full flex items-center justify-center">
-            <CheckCircle size={40} className="text-emerald-500" />
+            <Trophy size={40} className="text-emerald-500" />
           </div>
           <div>
-            <h2 className="text-2xl font-bold text-slate-900">Submitted!</h2>
-            <p className="text-slate-500 mt-1">Your assignment has been auto-graded</p>
+            <h2 className="text-2xl font-bold text-slate-900">Quiz Completed!</h2>
+            <p className="text-slate-500 mt-1">Your quiz has been auto-graded</p>
           </div>
-          <div className={clsx('inline-block px-8 py-4 rounded-2xl text-center', scoreBg(result.score))}>
-            <p className="text-5xl font-bold">{Math.round(result.score ?? 0)}%</p>
+          <div className={clsx('inline-block px-8 py-4 rounded-2xl text-center w-full', scoreBg(score))}>
+            <p className="text-5xl font-bold">{score}%</p>
             <p className="text-sm mt-1">{result.correctAnswers} / {result.totalQuestions} correct</p>
+            <p className="text-sm font-semibold mt-1">{performance}</p>
           </div>
           <div className="grid grid-cols-2 gap-3 text-sm">
             <div className="bg-slate-50 rounded-xl p-3">
@@ -104,12 +116,17 @@ export default function AssignmentAttempt() {
             </div>
             <div className="bg-slate-50 rounded-xl p-3">
               <p className="text-slate-400">Status</p>
-              <p className="font-semibold text-slate-800 capitalize">{result.status?.toLowerCase().replace('_', ' ')}</p>
+              <p className="font-semibold text-slate-800 capitalize">{result.status?.toLowerCase().replace('_', ' ') || 'Submitted'}</p>
             </div>
           </div>
-          <button onClick={() => navigate(-1)} className="btn-primary w-full">
-            Back to Course
-          </button>
+          <div className="flex gap-3">
+            <button onClick={() => navigate(-1)} className="btn-primary flex-1">
+              Back to Course
+            </button>
+            <button onClick={() => navigate('/student/progress')} className="btn-secondary flex-1">
+              View Progress
+            </button>
+          </div>
         </div>
       </div>
     )

@@ -26,6 +26,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.security.MessageDigest;
 import java.security.SecureRandom;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.HexFormat;
@@ -64,6 +65,18 @@ public class AuthServiceImpl implements AuthService {
         String accessToken = jwtUtil.generateAccessToken(user.getUserId(), user.getEmail(), user.getRole().name());
         generateAndStoreRefreshToken(user.getUserId(), response);
 
+        // Update login streak
+        LocalDate today = LocalDate.now();
+        LocalDate lastLogin = user.getLastLoginDate();
+        if (lastLogin == null || lastLogin.isBefore(today.minusDays(1))) {
+            user.setStreakDays(1);
+        } else if (lastLogin.equals(today.minusDays(1))) {
+            user.setStreakDays(user.getStreakDays() + 1);
+        }
+        // Same day login: keep streak unchanged
+        user.setLastLoginDate(today);
+        userRepository.save(user);
+
         try {
             auditServiceClient.createLog(AuditLogRequest.builder()
                     .actorId(user.getUserId())
@@ -85,7 +98,9 @@ public class AuthServiceImpl implements AuthService {
                 .firstName(user.getFirstName())
                 .lastName(user.getLastName())
                 .role(user.getRole())
+                .studentOrEmployeeId(user.getStudentOrEmployeeId())
                 .passwordChangeRequired(user.isTempPasswordChangeRequired())
+                .streakDays(user.getStreakDays())
                 .build();
     }
 

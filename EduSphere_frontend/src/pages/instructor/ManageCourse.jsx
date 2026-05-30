@@ -1,19 +1,20 @@
 import { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueries, useMutation, useQueryClient } from '@tanstack/react-query'
 import { courseService } from '../../services/courseService'
 import { enrollmentService } from '../../services/enrollmentService'
 import { assignmentService } from '../../services/assignmentService'
+import { userService } from '../../services/userService'
 import { PageLoader } from '../../components/common/LoadingSpinner'
 import Modal from '../../components/common/Modal'
 import Badge from '../../components/common/Badge'
 import { CONTENT_TYPE_LABELS, CONTENT_TYPE_COLORS } from '../../utils/constants'
-import { ArrowLeft, Plus, Trash2, Video, FileText, Users, ClipboardList, ExternalLink } from 'lucide-react'
+import { ArrowLeft, Plus, Trash2, Video, FileText, Users, ClipboardList, ExternalLink, ScrollText } from 'lucide-react'
 import { formatDate, formatDateTime, isDeadlinePassed } from '../../utils/helpers'
 import toast from 'react-hot-toast'
 import clsx from 'clsx'
 
-const TABS = ['Content', 'Assignments', 'Enrollments']
+const TABS = ['Content', 'Assignments', 'Syllabus', 'Enrollments']
 
 export default function ManageCourse() {
   const { courseId } = useParams()
@@ -45,6 +46,13 @@ export default function ManageCourse() {
     queryKey: ['enrollments', courseId],
     queryFn: () => enrollmentService.getEnrollmentsByCourse(courseId),
     enabled: tab === 'Enrollments',
+  })
+
+  const { data: syllabusData } = useQuery({
+    queryKey: ['syllabus', courseId],
+    queryFn: () => courseService.getSyllabus(courseId),
+    enabled: tab === 'Syllabus',
+    retry: false,
   })
 
   const addContent = useMutation({
@@ -89,12 +97,29 @@ export default function ManageCourse() {
     },
   })
 
+  const enrollments = enrollData?.data?.data || []
+
+  // Fetch user profiles for all enrolled users to get name + studentOrEmployeeId
+  const uniqueUserIds = [...new Set(enrollments.map((e) => String(e.userId)))]
+  const userProfileQueries = useQueries({
+    queries: uniqueUserIds.map((uid) => ({
+      queryKey: ['user-profile', uid],
+      queryFn: () => userService.getProfile(uid),
+      staleTime: 5 * 60 * 1000,
+      enabled: tab === 'Enrollments',
+    })),
+  })
+  const userMap = userProfileQueries.reduce((acc, q) => {
+    const u = q.data?.data?.data
+    if (u?.userId) acc[String(u.userId)] = u
+    return acc
+  }, {})
+
   if (isLoading) return <PageLoader />
 
   const course = courseData?.data?.data
   const contents = contentData?.data?.data || []
   const assignments = assignmentsData?.data?.data || []
-  const enrollments = enrollData?.data?.data || []
 
   const handleAddContent = () => {
     const payload = {
@@ -116,7 +141,7 @@ export default function ManageCourse() {
       <div className="card">
         <div className="flex items-start gap-4">
           <div>
-            <h1 className="text-xl font-bold text-slate-900">{course?.courseName}</h1>
+            <h1 className="text-xl font-bold" style={{ color: 'var(--text-primary)' }}>{course?.courseName}</h1>
             <div className="flex items-center gap-2 mt-1.5 flex-wrap">
               <Badge variant="purple">{course?.courseCode}</Badge>
               {course?.enrollmentDeadline && (
@@ -132,14 +157,12 @@ export default function ManageCourse() {
 
       {/* Tabs + actions */}
       <div className="flex items-center justify-between gap-4 flex-wrap">
-        <div className="flex gap-1 bg-slate-100 p-1 rounded-xl">
+        <div className="tab-bar">
           {TABS.map((t) => (
             <button
               key={t}
               onClick={() => setTab(t)}
-              className={clsx('px-4 py-1.5 rounded-lg text-sm font-medium transition-all',
-                tab === t ? 'bg-white text-primary-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'
-              )}
+              className={clsx('tab-btn', tab === t && 'active')}
             >
               {t}
             </button>
@@ -272,6 +295,31 @@ export default function ManageCourse() {
         </div>
       )}
 
+      {/* Syllabus tab */}
+      {tab === 'Syllabus' && (
+        <div className="card">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-10 h-10 rounded-xl bg-primary-100 flex items-center justify-center flex-shrink-0">
+              <ScrollText size={18} className="text-primary-600" />
+            </div>
+            <div>
+              <p className="font-semibold text-slate-900">Course Syllabus</p>
+              <p className="text-xs text-slate-400">Uploaded by coordinator</p>
+            </div>
+          </div>
+          {syllabusData?.data?.data ? (
+            <button
+              onClick={() => courseService.openSyllabus(courseId)}
+              className="btn-primary flex items-center gap-2"
+            >
+              <ExternalLink size={15} /> View Syllabus PDF
+            </button>
+          ) : (
+            <p className="text-sm text-slate-400">No syllabus has been uploaded for this course yet.</p>
+          )}
+        </div>
+      )}
+
       {/* Enrollments tab */}
       {tab === 'Enrollments' && (
         <div className="card overflow-hidden">
@@ -283,29 +331,55 @@ export default function ManageCourse() {
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-slate-100 bg-slate-50">
-                    <th className="text-left py-3 px-4 text-slate-500 font-medium">User ID</th>
-                    <th className="text-left py-3 px-4 text-slate-500 font-medium">Role</th>
-                    <th className="text-left py-3 px-4 text-slate-500 font-medium">Enrolled</th>
-                    <th className="text-left py-3 px-4 text-slate-500 font-medium">Status</th>
+                  <tr className="border-b" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-base)' }}>
+                    <th className="text-left py-3 px-4 font-medium" style={{ color: 'var(--text-muted)' }}>Student / Employee</th>
+                    <th className="text-left py-3 px-4 font-medium" style={{ color: 'var(--text-muted)' }}>ID</th>
+                    <th className="text-left py-3 px-4 font-medium" style={{ color: 'var(--text-muted)' }}>Role</th>
+                    <th className="text-left py-3 px-4 font-medium" style={{ color: 'var(--text-muted)' }}>Enrolled</th>
+                    <th className="text-left py-3 px-4 font-medium" style={{ color: 'var(--text-muted)' }}>Status</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {enrollments.map((e) => (
-                    <tr key={e.enrollmentId} className="border-b border-slate-50 hover:bg-slate-50 transition-colors">
-                      <td className="py-3 px-4 font-mono text-xs text-slate-600">{e.userId?.slice(0, 12)}…</td>
-                      <td className="py-3 px-4">
-                        <Badge variant={e.userRole === 'STUDENT' ? 'blue' : 'green'}>{e.userRole}</Badge>
-                      </td>
-                      <td className="py-3 px-4 text-slate-500">{formatDate(e.enrolledAt)}</td>
-                      <td className="py-3 px-4">
-                        <Badge variant={e.status === 'ACTIVE' ? 'green' : 'slate'}>{e.status}</Badge>
-                      </td>
-                    </tr>
-                  ))}
+                  {enrollments.map((e) => {
+                    const u = userMap[String(e.userId)]
+                    const name = u ? `${u.firstName} ${u.lastName}` : '…'
+                    const empId = u?.studentOrEmployeeId
+                    const initials = u ? `${u.firstName?.[0] ?? ''}${u.lastName?.[0] ?? ''}` : '?'
+                    return (
+                      <tr key={e.enrollmentId} className="border-b transition-colors hover:bg-slate-50" style={{ borderColor: 'var(--border)' }}>
+                        <td className="py-3 px-4">
+                          <div className="flex items-center gap-3">
+                            <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-white text-xs font-bold flex-shrink-0 ${e.userRole === 'STUDENT' ? 'bg-blue-400' : 'bg-emerald-400'}`}>
+                              {initials}
+                            </div>
+                            <div>
+                              <p className="font-medium" style={{ color: 'var(--text-primary)' }}>{name}</p>
+                              {u?.email && <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{u.email}</p>}
+                            </div>
+                          </div>
+                        </td>
+                        <td className="py-3 px-4">
+                          {empId ? (
+                            <span className="font-mono text-xs font-semibold px-2 py-0.5 rounded" style={{ backgroundColor: 'var(--border)', color: 'var(--text-secondary)' }}>
+                              {empId}
+                            </span>
+                          ) : (
+                            <span className="text-xs" style={{ color: 'var(--text-muted)' }}>—</span>
+                          )}
+                        </td>
+                        <td className="py-3 px-4">
+                          <Badge variant={e.userRole === 'STUDENT' ? 'blue' : 'green'}>{e.userRole}</Badge>
+                        </td>
+                        <td className="py-3 px-4" style={{ color: 'var(--text-muted)' }}>{formatDate(e.enrolledAt)}</td>
+                        <td className="py-3 px-4">
+                          <Badge variant={e.status === 'ACTIVE' ? 'green' : 'slate'}>{e.status}</Badge>
+                        </td>
+                      </tr>
+                    )
+                  })}
                   {enrollments.length === 0 && (
                     <tr>
-                      <td colSpan={4} className="py-10 text-center text-slate-400">No enrollments yet.</td>
+                      <td colSpan={5} className="py-10 text-center" style={{ color: 'var(--text-muted)' }}>No enrollments yet.</td>
                     </tr>
                   )}
                 </tbody>
