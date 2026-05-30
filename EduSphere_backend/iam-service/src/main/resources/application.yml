@@ -4,11 +4,6 @@ server:
 spring:
   application:
     name: iam-service
-  servlet:
-    multipart:
-      enabled: true
-      max-file-size: 20MB
-      max-request-size: 25MB
   datasource:
     url: jdbc:mysql://localhost:3306/edusphere_iam?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
     username: root
@@ -25,8 +20,8 @@ spring:
   mail:
     host: smtp.gmail.com
     port: 587
-    username: gudladurgaprasanna1@gmail.com
-    password: kwkechemoaojgavd
+    username: pandavamadhumala@gmail.com
+    password: ayyk gmvn idrf hral
     properties:
       mail:
         smtp:

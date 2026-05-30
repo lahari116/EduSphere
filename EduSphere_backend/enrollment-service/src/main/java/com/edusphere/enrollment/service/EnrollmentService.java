@@ -35,4 +35,6 @@ public interface EnrollmentService {
     boolean isEnrolled(UUID userId, UUID courseId);
 
     long getTotalEnrollmentCount();
+
+    List<EnrollmentResponse> getDeletedEnrollments();
 }

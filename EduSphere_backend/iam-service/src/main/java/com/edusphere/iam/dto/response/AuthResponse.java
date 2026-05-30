@@ -22,4 +22,5 @@ public class AuthResponse {
     private Role role;
     private String studentOrEmployeeId;
     private boolean passwordChangeRequired;
+    private int streakDays;
 }

@@ -1,4 +1,4 @@
-package com.edusphere.course.entity;
+﻿package com.edusphere.course.entity;
 
 import jakarta.persistence.*;
 import lombok.*;

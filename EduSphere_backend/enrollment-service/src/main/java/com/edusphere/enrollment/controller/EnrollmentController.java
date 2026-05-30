@@ -89,9 +89,9 @@ public class EnrollmentController {
     }
 
     @GetMapping
-    @PreAuthorize("hasAnyRole('ADMIN', 'COORDINATOR', 'INSTRUCTOR')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'COORDINATOR', 'INSTRUCTOR', 'SERVICE')")
     @Operation(summary = "Get all enrollments for a course",
-            description = "Admin, Coordinator, and Instructor can view enrollment records for a given courseId.")
+            description = "Admin, Coordinator, Instructor and internal services can view enrollment records for a given courseId.")
     public ResponseEntity<ApiResponse<List<EnrollmentResponse>>> getEnrollmentsByCourse(
             @RequestParam UUID courseId) {
         List<EnrollmentResponse> enrollments = enrollmentService.getEnrollmentsByCourse(courseId);
@@ -123,5 +123,14 @@ public class EnrollmentController {
     public ResponseEntity<ApiResponse<Long>> getTotalEnrollmentCount() {
         long count = enrollmentService.getTotalEnrollmentCount();
         return ResponseEntity.ok(ApiResponse.success("Total enrollment count retrieved", count));
+    }
+
+    @GetMapping("/past")
+    @PreAuthorize("hasAnyRole('ADMIN', 'COORDINATOR')")
+    @Operation(summary = "Get all past (deleted/dropped) enrollments (Admin/Coordinator)",
+            description = "Returns all soft-deleted enrollment records so admin or coordinator can view enrollment history.")
+    public ResponseEntity<ApiResponse<List<EnrollmentResponse>>> getPastEnrollments() {
+        List<EnrollmentResponse> enrollments = enrollmentService.getDeletedEnrollments();
+        return ResponseEntity.ok(ApiResponse.success("Past enrollments retrieved successfully", enrollments));
     }
 }

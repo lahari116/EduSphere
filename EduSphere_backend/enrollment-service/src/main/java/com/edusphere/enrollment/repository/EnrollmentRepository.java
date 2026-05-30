@@ -30,4 +30,8 @@ public interface EnrollmentRepository extends JpaRepository<Enrollment, UUID> {
     List<Enrollment> findByStatusAndIsDeletedFalse(EnrollmentStatus status);
 
     List<Enrollment> findByUserIdAndStatusAndIsDeletedFalse(UUID userId, EnrollmentStatus status);
+
+    List<Enrollment> findByIsDeletedTrue();
+
+    List<Enrollment> findByCourseIdAndIsDeletedTrue(UUID courseId);
 }

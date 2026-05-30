@@ -254,21 +254,10 @@ public class AdminServiceImpl implements AdminService {
     private String getCellValue(Row row, int col) {
         Cell cell = row.getCell(col);
         if (cell == null) return null;
-        // For formula cells, resolve to the cached result type
-        CellType type = cell.getCellType() == CellType.FORMULA
-                ? cell.getCachedFormulaResultType()
-                : cell.getCellType();
-        return switch (type) {
-            case STRING  -> cell.getStringCellValue().trim();
-            case NUMERIC -> {
-                double d = cell.getNumericCellValue();
-                // Avoid "1.0" for integer-looking values (e.g. IDs stored as numbers)
-                yield (d == Math.floor(d) && !Double.isInfinite(d))
-                        ? String.valueOf((long) d)
-                        : String.valueOf(d);
-            }
-            case BOOLEAN -> String.valueOf(cell.getBooleanCellValue());
-            default      -> null;
+        return switch (cell.getCellType()) {
+            case STRING -> cell.getStringCellValue().trim();
+            case NUMERIC -> String.valueOf((long) cell.getNumericCellValue());
+            default -> null;
         };
     }
 

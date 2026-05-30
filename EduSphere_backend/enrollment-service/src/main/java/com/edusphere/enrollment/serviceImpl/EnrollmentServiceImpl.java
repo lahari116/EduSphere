@@ -257,6 +257,12 @@ public class EnrollmentServiceImpl implements EnrollmentService {
         return enrollmentRepository.countByIsDeletedFalse();
     }
 
+    @Override
+    public List<EnrollmentResponse> getDeletedEnrollments() {
+        return enrollmentRepository.findByIsDeletedTrue()
+                .stream().map(this::toResponse).collect(Collectors.toList());
+    }
+
     private EnrollmentResponse toResponse(Enrollment enrollment) {
         return EnrollmentResponse.builder()
                 .enrollmentId(enrollment.getEnrollmentId())

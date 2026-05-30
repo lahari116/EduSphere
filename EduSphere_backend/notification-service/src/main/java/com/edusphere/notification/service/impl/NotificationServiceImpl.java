@@ -20,9 +20,11 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
+import jakarta.mail.internet.MimeMessage;
 import org.springframework.mail.MailException;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
+import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -44,9 +46,35 @@ public class NotificationServiceImpl implements NotificationService {
     @Value("${spring.mail.username}")
     private String mailFrom;
 
+    private static final java.util.Set<String> OTP_EVENT_TYPES = java.util.Set.of(
+            "PASSWORD_RESET_OTP", "OTP_SENT", "TEMP_PASSWORD", "OTP_GENERATED"
+    );
+
+    private boolean isOtpEvent(String eventType) {
+        if (eventType == null) return false;
+        String upper = eventType.toUpperCase();
+        return upper.contains("OTP") || OTP_EVENT_TYPES.contains(upper);
+    }
+
     @Override
     @Transactional
     public NotificationResponse dispatch(DispatchNotificationRequest request) {
+        // OTP / security events are email-only — no in-app notification saved to DB
+        if (isOtpEvent(request.getEventType())) {
+            String recipientEmail = (request.getRecipientEmail() != null && !request.getRecipientEmail().isBlank())
+                    ? request.getRecipientEmail()
+                    : resolveUserEmail(request.getUserId());
+            sendEmail(recipientEmail, request.getTitle(), request.getBody(), request.getUserId());
+            return NotificationResponse.builder()
+                    .userId(request.getUserId())
+                    .eventType(request.getEventType())
+                    .title(request.getTitle())
+                    .body(request.getBody())
+                    .channel(NotificationChannel.EMAIL)
+                    .isRead(false)
+                    .build();
+        }
+
         Optional<NotificationPreference> prefOpt = preferenceRepository
                 .findByUserIdAndEventType(request.getUserId(), request.getEventType());
 
@@ -161,23 +189,99 @@ public class NotificationServiceImpl implements NotificationService {
     @Override
     @Transactional
     public NotificationResponse notifyCourseCompletion(CourseCompletionNotificationRequest request) {
-        String displayName = request.getStudentName() != null ? request.getStudentName() : "Student";
+        // Resolve student name and email from IAM service
+        String displayName = request.getStudentName();
+        String recipientEmail = null;
+        try {
+            ClientApiResponse<UserDto> userResp = iamServiceClient.getUser(request.getStudentId());
+            if (userResp != null && userResp.isSuccess() && userResp.getData() != null) {
+                UserDto u = userResp.getData();
+                if (displayName == null || displayName.isBlank()) {
+                    displayName = u.getFirstName() + " " + u.getLastName();
+                }
+                recipientEmail = u.getEmail();
+            }
+        } catch (Exception e) {
+            log.warn("Could not resolve student info for course completion: {}", e.getMessage());
+        }
+        if (displayName == null || displayName.isBlank()) displayName = "Student";
 
         String title = "Congratulations! You completed \"" + request.getCourseTitle() + "\"";
-        String body = "Dear " + displayName + ",\n\n"
-                + "You have successfully completed all content in the course: " + request.getCourseTitle() + ".\n\n"
-                + "Your dedication and hard work have paid off. Keep up the great work!\n\n"
-                + "— EduSphere Team";
+        String inAppBody = "You have successfully completed all content in \"" + request.getCourseTitle() + "\". Great work!";
 
-        DispatchNotificationRequest dispatchRequest = DispatchNotificationRequest.builder()
+        // Save in-app notification
+        Notification notification = Notification.builder()
                 .userId(request.getStudentId())
                 .eventType("COURSE_COMPLETED")
                 .title(title)
-                .body(body)
+                .body(inAppBody)
                 .channel(NotificationChannel.BOTH)
+                .isRead(false)
                 .build();
+        notification = notificationRepository.save(notification);
 
-        return dispatch(dispatchRequest);
+        // Send HTML certificate email
+        final String finalEmail = (recipientEmail != null) ? recipientEmail
+                : request.getStudentId() + "@edusphere.edu";
+        final String finalName = displayName;
+        final String courseTitle = request.getCourseTitle();
+        try {
+            MimeMessage mimeMessage = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, false, "UTF-8");
+            helper.setFrom(mailFrom);
+            helper.setTo(finalEmail);
+            helper.setSubject("🎓 Certificate of Completion — " + courseTitle);
+            helper.setText(buildCertificateHtml(finalName, courseTitle), true);
+            mailSender.send(mimeMessage);
+            log.info("Certificate email sent to {} for course '{}'", finalEmail, courseTitle);
+        } catch (Exception e) {
+            log.error("Failed to send certificate email to {}: {}", finalEmail, e.getMessage());
+        }
+
+        return toNotificationResponse(notification);
+    }
+
+    private String buildCertificateHtml(String studentName, String courseTitle) {
+        String date = java.time.LocalDate.now()
+                .format(java.time.format.DateTimeFormatter.ofPattern("MMMM d, yyyy"));
+        return "<!DOCTYPE html><html><head><meta charset='UTF-8'></head><body style='"
+                + "margin:0;padding:0;background:#f0f4f8;font-family:Georgia,serif;'>"
+                + "<div style='max-width:680px;margin:40px auto;background:#fff;"
+                + "border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;'>"
+                // Header banner
+                + "<div style='background:linear-gradient(135deg,#7c3aed,#4f46e5);padding:36px 40px;text-align:center;'>"
+                + "<h1 style='color:#fff;margin:0;font-size:28px;letter-spacing:1px;'>🎓 EduSphere</h1>"
+                + "<p style='color:rgba(255,255,255,0.8);margin:6px 0 0;font-size:14px;letter-spacing:2px;'>CERTIFICATE OF COMPLETION</p>"
+                + "</div>"
+                // Gold certificate body
+                + "<div style='padding:48px 56px;text-align:center;border:6px solid transparent;"
+                + "background:linear-gradient(#fff,#fff) padding-box,"
+                + "linear-gradient(135deg,#f59e0b,#d97706) border-box;margin:24px;border-radius:8px;'>"
+                + "<p style='color:#64748b;font-size:14px;margin:0 0 12px;'>THIS IS TO CERTIFY THAT</p>"
+                + "<h2 style='color:#1e293b;font-size:34px;margin:0 0 8px;font-style:italic;'>"
+                + escapeHtml(studentName) + "</h2>"
+                + "<p style='color:#64748b;font-size:14px;margin:0 0 24px;'>has successfully completed the course</p>"
+                + "<h3 style='color:#4f46e5;font-size:22px;margin:0 0 24px;border-bottom:2px solid #e2e8f0;"
+                + "padding-bottom:20px;'>" + escapeHtml(courseTitle) + "</h3>"
+                + "<p style='color:#94a3b8;font-size:13px;margin:0;'>Issued on <strong style='color:#64748b;'>"
+                + date + "</strong></p>"
+                + "<div style='margin-top:28px;'>"
+                + "<span style='display:inline-block;background:linear-gradient(135deg,#10b981,#059669);"
+                + "color:#fff;padding:8px 24px;border-radius:99px;font-size:13px;font-family:sans-serif;"
+                + "letter-spacing:0.5px;'>✔ Course Completed</span>"
+                + "</div></div>"
+                // Footer
+                + "<div style='padding:20px 40px;text-align:center;border-top:1px solid #f1f5f9;"
+                + "background:#fafafa;'>"
+                + "<p style='color:#94a3b8;font-size:12px;margin:0;font-family:sans-serif;'>"
+                + "This certificate was automatically generated by <strong>EduSphere Learning Platform</strong>.<br>"
+                + "Keep learning and growing!</p>"
+                + "</div></div></body></html>";
+    }
+
+    private String escapeHtml(String text) {
+        if (text == null) return "";
+        return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;");
     }
 
     private String resolveUserEmail(UUID userId) {

@@ -42,7 +42,7 @@ public class Enrollment extends BaseEntity {
     private boolean isException = false;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "status")
+    @Column(name = "status", columnDefinition = "VARCHAR(20)")
     @Builder.Default
     private EnrollmentStatus status = EnrollmentStatus.ACTIVE;
 }
