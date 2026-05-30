@@ -3,6 +3,7 @@ package com.edusphere.notification.service.impl;
 import com.edusphere.notification.client.IamServiceClient;
 import com.edusphere.notification.client.dto.ClientApiResponse;
 import com.edusphere.notification.client.dto.UserDto;
+import com.edusphere.notification.util.CertificatePdfGenerator;
 import com.edusphere.notification.dto.request.CourseCompletionNotificationRequest;
 import com.edusphere.notification.dto.request.DispatchNotificationRequest;
 import com.edusphere.notification.dto.request.PreferenceEntry;
@@ -21,6 +22,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import jakarta.mail.internet.MimeMessage;
+import jakarta.mail.util.ByteArrayDataSource;
 import org.springframework.mail.MailException;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
@@ -42,6 +44,7 @@ public class NotificationServiceImpl implements NotificationService {
     private final NotificationPreferenceRepository preferenceRepository;
     private final JavaMailSender mailSender;
     private final IamServiceClient iamServiceClient;
+    private final CertificatePdfGenerator certificatePdfGenerator;
 
     @Value("${spring.mail.username}")
     private String mailFrom;
@@ -220,18 +223,38 @@ public class NotificationServiceImpl implements NotificationService {
                 .build();
         notification = notificationRepository.save(notification);
 
-        // Send HTML certificate email
+        // Generate certificate PDF
         final String finalEmail = (recipientEmail != null) ? recipientEmail
                 : request.getStudentId() + "@edusphere.edu";
         final String finalName = displayName;
         final String courseTitle = request.getCourseTitle();
+
+        byte[] certificatePdf = null;
+        try {
+            certificatePdf = certificatePdfGenerator.generate(finalName, courseTitle);
+        } catch (Exception e) {
+            log.warn("Certificate PDF generation failed — sending email without attachment: {}", e.getMessage());
+        }
+
+        // Send HTML certificate email with PDF attachment
         try {
             MimeMessage mimeMessage = mailSender.createMimeMessage();
-            MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, false, "UTF-8");
+            // multipart=true to support both HTML body and PDF attachment
+            MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, true, "UTF-8");
             helper.setFrom(mailFrom);
             helper.setTo(finalEmail);
-            helper.setSubject("🎓 Certificate of Completion — " + courseTitle);
+            helper.setSubject("Congratulations! Your Certificate of Completion — " + courseTitle);
             helper.setText(buildCertificateHtml(finalName, courseTitle), true);
+
+            if (certificatePdf != null) {
+                String fileName = "Certificate_"
+                        + courseTitle.replaceAll("[^a-zA-Z0-9]", "_")
+                        + ".pdf";
+                helper.addAttachment(fileName,
+                        new ByteArrayDataSource(certificatePdf, "application/pdf"));
+                log.info("Attaching certificate PDF '{}' to email for {}", fileName, finalEmail);
+            }
+
             mailSender.send(mimeMessage);
             log.info("Certificate email sent to {} for course '{}'", finalEmail, courseTitle);
         } catch (Exception e) {
